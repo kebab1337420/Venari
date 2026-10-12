@@ -115,10 +115,12 @@ describe('MCP tools', () => {
     expect(res.text).not.toContain(plainSecret)
   })
 
-  it('start_scan refuse sans confirmation ROE', async () => {
+  it('start_scan n’exige plus roeConfirm (contrôle ROE optionnel)', async () => {
     const res = await callTool('start_scan', { programId: 'prog-1', depth: 'low', roeConfirm: false })
-    expect(res.isError).toBe(true)
-    expect(res.text).toContain('règles d’engagement')
+    // L’ancien refus « confirmation des règles d’engagement requise » a disparu :
+    // l’appel franchit ce contrôle. Ici il échoue plus loin, sur la fraîcheur du scope.
+    expect(res.text).not.toContain('confirmation')
+    expect(res.text).not.toContain('règles d’engagement')
   })
 
   it('start_scan refuse un depth invalide', async () => {

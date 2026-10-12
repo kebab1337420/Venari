@@ -91,6 +91,33 @@ export function selectTargets(scope: ScopeDomain[]): string[] {
   return out
 }
 
+/** Hôtes in-scope d'un programme, normalisés (minuscules, sans crochets ni point final ni `*.`). */
+export function inScopeHosts(scope: ScopeDomain[]): string[] {
+  const hosts = new Set<string>()
+  for (const d of scope) {
+    if (!d.inScope) continue
+    const raw = d.endpoint.trim()
+    if (/^[a-z][a-z0-9+.-]*:/i.test(raw) && !/^https?:\/\//i.test(raw)) continue
+    const ep = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+    let u: URL
+    try {
+      u = new URL(ep)
+    } catch {
+      continue
+    }
+    const host = u.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '').replace(/^\*\./, '')
+    if (host) hosts.add(host)
+  }
+  return [...hosts]
+}
+
+/** Vrai si l'hôte de l'URL correspond à une cible in-scope (ou un de ses sous-domaines). */
+export function isUrlInScope(scope: ScopeDomain[], url: URL): boolean {
+  const host = url.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '')
+  if (!host) return false
+  return inScopeHosts(scope).some((h) => host === h || host.endsWith(`.${h}`))
+}
+
 export function buildPlan(depth: ScanDepth, targets: string[], rateLimit: number, opts?: PlanOptions): ScanPlan {
   const steps: ScanStep[] = []
   const ua = opts?.userAgent?.trim() || UA

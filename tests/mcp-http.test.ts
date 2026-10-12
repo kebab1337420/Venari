@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -164,7 +164,7 @@ describe('serveur MCP (HTTP réel)', () => {
     expect(bad.status).toBe(400)
   })
 
-  it('tools/list expose les 16 outils attendus', async () => {
+  it('tools/list expose les 18 outils attendus', async () => {
     const res = await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
     const json = (await res.json()) as { result: { tools: { name: string; description: string }[] } }
     const names = json.result.tools.map((t) => t.name)
@@ -172,6 +172,7 @@ describe('serveur MCP (HTTP réel)', () => {
       'list_programs', 'get_program_detail', 'list_credentials', 'set_note', 'list_notes',
       'list_tools', 'install_tool', 'run_tool', 'open_browser', 'fetch_page', 'list_scans',
       'start_scan', 'get_scan', 'scan_events', 'dedupe_findings', 'cvss_score',
+      'http_request', 'submit_report',
     ])
     for (const tool of json.result.tools) {
       expect(tool.description.length).toBeGreaterThan(20)
@@ -331,6 +332,15 @@ describe('outils MCP ajoutés (notes, page, scans, dedupe, CVSS)', () => {
     pageServer = createServer((req, res) => {
       pageRequests.push({ url: req.url ?? '', headers: req.headers })
       const path = (req.url ?? '/').split('?')[0]
+      if (path === '/echo' && req.method === 'POST') {
+        let data = ''
+        req.on('data', (c) => { data += c })
+        req.on('end', () => {
+          res.writeHead(200, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ received: data }))
+        })
+        return
+      }
       if (path === '/redirect') {
         res.writeHead(302, { location: '/page' })
         res.end()
@@ -636,6 +646,82 @@ describe('outils MCP ajoutés (notes, page, scans, dedupe, CVSS)', () => {
     expect((await callTool('dedupe_findings', { scanId: 9999 })).isError).toBe(true)
     const tooMany = await callTool('dedupe_findings', { lines: new Array(501).fill('https://a.test/') })
     expect(tooMany.isError).toBe(true)
+  })
+
+  // --- http_request --------------------------------------------------------
+  function seedScope(endpoint: string): void {
+    getRepository().setProgramDetail(
+      'prog-1',
+      JSON.stringify([
+        { id: 'd1', type: 'in-scope', endpoint, tier: 'tier1', description: '', inScope: true },
+      ]),
+      null,
+      Date.now(),
+    )
+  }
+
+  it('http_request envoie une requête POST vers un hôte in-scope et renvoie la réponse', async () => {
+    seedScope(`http://127.0.0.1:${pagePort}`)
+    const out = await callTool('http_request', {
+      programId: 'prog-1',
+      url: `http://127.0.0.1:${pagePort}/echo`,
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'user=admin',
+    })
+    expect(out.isError).toBe(false)
+    const payload = out.payload as { status: number; method: string; body: string }
+    expect(payload.status).toBe(200)
+    expect(payload.method).toBe('POST')
+    expect(payload.body).toContain('user=admin')
+    expect(pageRequests.some((r) => r.url === '/echo')).toBe(true)
+  })
+
+  it('http_request accepte un hôte in-scope et refuse tout autre hôte', async () => {
+    seedScope('http://127.0.0.1')
+    const ok = await callTool('http_request', { programId: 'prog-1', url: `http://127.0.0.1:${pagePort}/page` })
+    expect(ok.isError).toBe(false)
+    expect((ok.payload as { status: number }).status).toBe(200)
+
+    const out = await callTool('http_request', { programId: 'prog-1', url: 'https://evil.example.org/' })
+    expect(out.isError).toBe(true)
+    expect(out.text).toContain('hors scope')
+  })
+
+  it('http_request refuse programme manquant, méthode inconnue, protocole et corps sur GET', async () => {
+    seedScope(`http://127.0.0.1:${pagePort}`)
+    expect((await callTool('http_request', { url: `http://127.0.0.1:${pagePort}/page` })).isError).toBe(true)
+    expect((await callTool('http_request', { programId: 'inconnu', url: `http://127.0.0.1:${pagePort}/page` })).isError).toBe(true)
+    expect((await callTool('http_request', { programId: 'prog-1', url: `http://127.0.0.1:${pagePort}/page`, method: 'TRACE' })).isError).toBe(true)
+    expect((await callTool('http_request', { programId: 'prog-1', url: 'ftp://127.0.0.1/x' })).isError).toBe(true)
+    expect((await callTool('http_request', { programId: 'prog-1', url: `http://127.0.0.1:${pagePort}/echo`, method: 'GET', body: 'x=1' })).isError).toBe(true)
+  })
+
+  // --- submit_report -------------------------------------------------------
+  it('submit_report écrit un rapport markdown local et renvoie son chemin', async () => {
+    const out = await callTool('submit_report', {
+      programId: 'prog-1',
+      title: 'XSS réfléchi sur /search',
+      severity: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N',
+      description: 'Le paramètre q est reflété sans échappement.',
+      steps: '1. Ouvrir /search?q=<script>alert(1)</script>',
+      impact: 'Exécution de script dans le navigateur de la victime.',
+    })
+    expect(out.isError).toBe(false)
+    const payload = out.payload as { path: string; submitted: boolean }
+    expect(payload.submitted).toBe(false)
+    expect(payload.path).toContain('reports')
+    expect(payload.path).toContain('prog-1')
+    expect(payload.path.endsWith('.md')).toBe(true)
+    expect(existsSync(payload.path)).toBe(true)
+    const md = readFileSync(payload.path, 'utf8')
+    expect(md).toContain('# XSS réfléchi sur /search')
+    expect(md).toContain('lecture seule')
+  })
+
+  it('submit_report refuse un programme inconnu ou des champs requis manquants', async () => {
+    expect((await callTool('submit_report', { programId: 'prog-1', title: 'T' })).isError).toBe(true)
+    expect((await callTool('submit_report', { programId: 'inconnu', title: 'T', description: 'D' })).isError).toBe(true)
   })
 })
 

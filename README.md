@@ -4,7 +4,7 @@
 
 Application desktop Windows et Linux pour chasser sur la plateforme de bug bounty **Intigriti** : catalogue de programmes, favoris/groups/tags/notes locaux, veille sur le scope, scans de profondeur low/med/high, catalogue de **144 outils** de pen-test installables, et un serveur MCP local pour piloter le tout depuis une IA (Claude, opencode…).
 
-**Venari est un outil de lecture/assistance. Il ne soumet jamais de rapport automatiquement, et aucun scan n'est lancé sans confirmation explicite des règles d'engagement.**
+**Venari automatise la reconnaissance et le test contrôlé, dans le scope des programmes : les agents IA (via MCP) peuvent lancer des outils, envoyer des requêtes HTTP et rédiger des rapports sans confirmation manuelle, mais les requêtes restent confinées aux cibles in-scope. Aucun rapport n'est soumis automatiquement à la plateforme — l'API chercheur d'Intigriti est en lecture seule (aucun endpoint public de soumission) : les rapports sont écrits localement dans `reports/`, prêts à transmettre.**
 
 ## Prérequis
 
@@ -112,7 +112,7 @@ Le port MCP n'est volontairement pas vérifié par les jobs de smoke test : le s
 
 ### Scans low / med / high
 - Bouton **Scanner** dans le détail d'une mission : profils de profondeur — Bas (curl + nuclei low/medium), Moyen (+ tags tech/exposure, severities ≤ high), Élevé (+ ffuf, severities ≤ critical).
-- **Garde-fous** : cibles limitées au scope **in-scope** et aux endpoints HTTP(S) ; confirmation manuelle de lecture des ROE obligatoire ; rate limit par scan ; bouton **Arrêter** toujours disponible ; tout est loggé dans `scan_events` ; exécution séquentielle, arrêt propre du process courant. Aucune soumission de rapport.
+- **Garde-fous** : cibles limitées au scope **in-scope** et aux endpoints HTTP(S) ; la confirmation ROE (`roeConfirm`) est optionnelle (le scan peut être lancé directement, y compris par une IA) ; les ROE restent respectées (si `automatedTooling: 0`, le scan est refusé) ; rate limit par scan ; bouton **Arrêter** toujours disponible ; tout est loggé dans `scan_events` ; exécution séquentielle, arrêt propre du process courant. Aucune soumission automatique : les rapports sont rédigés localement (`submit_report`).
 - Si **aucun** outil du plan n'a pu être lancé, le scan se termine en `error` avec la liste des binaires manquants — il ne se présente jamais comme réussi.
 - **Un scan ne peut pas rester bloqué** : chaque étape a un plafond de 30 min (au-delà, l'outil est arrêté et le scan le dit), le flux est plafonné à 5 000 événements par scan (la troncature est annoncée, jamais silencieuse), et le bouton **Arrêter** tue l'outil *et* ses sous-processus — ffuf ou nuclei lancent des enfants, sans cela un scan orphelin continuerait après l'arrêt.
 
@@ -145,13 +145,13 @@ Détails qui comptent :
 - Écran **Réglages → IA** : activer un serveur MCP HTTP (port défaut `8787`), exposable **sur le réseau local (LAN)** pour piloter Venari depuis plusieurs PC, avec **un jeton nommé par PC/IA** (jetons chiffrés, révocation en 1 clic, jamais listés dans le README ni les logs).
 - **Aucun secret ne traverse le pont vers l'interface** : les jetons MCP et d'agent sont affichés masqués (`••••••••1234`), le bouton « Copier » fait écrire dans le presse-papier par le processus principal, et les extraits de configuration affichent `<JETON>`. Même règle pour les mots de passe enregistrés : la liste ne contient qu'un booléen « a un secret », le déchiffrement n'arrive que pour la ligne dont l'utilisateur demande la révélation.
 - Adresse du serveur (locale et LAN) copiable en 1 clic, et un tableau **Activité des IA** journalise chaque appel d'outil (poste, outil, statut, durée).
-- **Outils MCP** (16) : `list_programs` (paginé : `limit` / `offset`, total annoncé dans `details`), `get_program_detail`, `list_credentials` (sans secret), `set_note` / `list_notes` (notes horodatées, lecture seule pour la seconde), `list_tools`, `install_tool`, `open_browser`, `fetch_page`, `list_scans`, `start_scan` (mêmes garde-fous que l'UI), `get_scan`, `scan_events`, `dedupe_findings`, `cvss_score`, `run_tool` (exécution *encadrée* d'un binaire du catalogue, whitelist stricte par défaut).
+- **Outils MCP** (18) : `list_programs` (paginé : `limit` / `offset`, total annoncé dans `details`), `get_program_detail`, `list_credentials` (sans secret), `set_note` / `list_notes` (notes horodatées, lecture seule pour la seconde), `list_tools`, `install_tool`, `open_browser`, `fetch_page`, `list_scans`, `start_scan` (mêmes garde-fous que l'UI, `roeConfirm` optionnel), `get_scan`, `scan_events`, `dedupe_findings`, `cvss_score`, `run_tool` (exécution *encadrée* d'un binaire du catalogue, whitelist stricte par défaut), `http_request` (requête HTTP personnalisée confinée aux hôtes *in-scope* du programme, sans confirmation), `submit_report` (rapport Markdown écrit dans `reports/`, **aucune soumission externe**).
 - Exemple de config `claude_desktop_config.json` / `opencode.json` fourni dans l'app.
 - Pare-feu : l'app vérifie l'état de la règle d'ouverture du port et sait la créer — `netsh` sous Windows, `ufw` / `firewall-cmd` via `pkexec` sous Linux. Sur les autres plateformes, l'état est honnêtement rapporté « non géré ». La règle est **limitée au réseau privé** (profils `private` sous Windows, sources RFC1918 sous Linux) et **retirée à la désactivation du serveur**.
 - **Le mode LAN n'est accordé que sur un réseau privé** (10/8, 172.16/12, 192.168/16). La vérification est faite dans `startMcpServer` lui-même : aucun appelant ne peut obtenir `0.0.0.0` depuis un café ou un partage public, même en le demandant explicitement.
 
 ### Agent IA (pont Claude Code → Venari)
-- Dossier `agent/` : un **pack prêt à copier** dans un dossier de mission pour donner à Claude Code un workflow encadré (sélection de programmes, vérification ROE avec verdicts *refuse/restreint/légitime*, choix low/med/high, scan puis tri des résultats, brouillon de rapport dans `reports/` — **jamais de soumission**).
+- Dossier `agent/` : un **pack prêt à copier** dans un dossier de mission pour donner à Claude Code un workflow encadré (sélection de programmes, vérification ROE avec verdicts *refuse/restreint/légitime*, choix low/med/high, scan puis tri des résultats, brouillon de rapport dans `reports/` — **soumission manuelle uniquement**, l'API Intigriti étant en lecture seule).
 - Contenu : `CLAUDE.md` (garde-fous non négociables), deux skills (`.claude/skills/bountydesk-hunt`, `bountydesk-roe-check`), un agent `hunt-validated` (demande validation humaine avant exécution), et un gabarit `.mcp.json`.
 - Mise en place : activer l'IA dans Réglages, copier l'URL + le jeton (1 clic), les placer dans `cibles/<mission>/.mcp.json`. Détails dans `agent/README.md`.
 

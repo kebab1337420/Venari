@@ -2,13 +2,14 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { networkInterfaces } from 'node:os'
-import { statSync } from 'node:fs'
-import { resolve } from 'node:path'
-import type { McpStatusInfo, ScanDepth } from '../../../shared/ipc'
+import { mkdirSync, statSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { app } from 'electron'
+import type { McpStatusInfo, ProgramDetailData, ScanDepth } from '../../../shared/ipc'
 import { getClient } from '../../app-state'
 import { getRepository } from '../../db'
 import { fetchProgramDetail, getCachedProgramDetail } from '../program-detail'
-import { buildPlan, selectTargets, MAX_TARGETS } from '../scan/plan'
+import { buildPlan, inScopeHosts, isUrlInScope, selectTargets, MAX_TARGETS } from '../scan/plan'
 import { activeScanCount, activeScanForProgram, killTree, startScan } from '../scan/runner'
 import { getTool, TOOL_CATALOG } from '../tools/catalog'
 import { currentTools, installTool, resolveBinary, toolsDir } from '../tools/installer'
@@ -559,6 +560,20 @@ const runToolDef: McpToolDef = {
   },
 }
 
+/** Détail d'un programme : fraîcheur via l'API si un jeton est présent, sinon cache local. */
+async function resolveProgramDetail(programId: string): Promise<ProgramDetailData | null> {
+  if (getClient().getToken()) {
+    try {
+      return await fetchProgramDetail(getClient(), programId)
+    } catch {
+      return getCachedProgramDetail(programId)
+    }
+  }
+  return getCachedProgramDetail(programId)
+}
+
+const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
+
 const TOOL_DEFS: McpToolDef[] = [
   {
     name: 'list_programs',
@@ -863,7 +878,7 @@ const TOOL_DEFS: McpToolDef[] = [
     name: 'start_scan',
     description: "Lance un scan automatisé d'un programme selon les règles d'engagement : profils low/med/high"
       + ' (curl puis nuclei, voire ffuf). Ne cible que des cibles in-scope http(s) et respecte un rate limit.'
-      + " roeConfirm DOIT être true (l'utilisateur confirme avoir lu les ROE). Ne soumet jamais de rapport.",
+      + " Aucune confirmation manuelle (roeConfirm) n'est requise : le scan démarre directement. Ne soumet jamais de rapport.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -872,7 +887,7 @@ const TOOL_DEFS: McpToolDef[] = [
         roeConfirm: BOOL,
         rateLimit: { type: 'integer', minimum: 1, maximum: 50 },
       },
-      required: ['programId', 'depth', 'roeConfirm'],
+      required: ['programId', 'depth'],
     },
     handler: async (args) => {
       const programId = asString(args.programId)
@@ -881,7 +896,6 @@ const TOOL_DEFS: McpToolDef[] = [
       const rateLimit = asInt(args.rateLimit, 1, 50)
       if (!programId) return { text: 'programId requis', isError: true }
       if (!depth) return { text: 'depth doit être low, med ou high', isError: true }
-      if (!roeConfirm) return { text: 'Confirmation des règles d’engagement requise (roeConfirm=true)', isError: true }
 
       const repo = getRepository()
       try {
@@ -1094,6 +1108,222 @@ const TOOL_DEFS: McpToolDef[] = [
           2,
         ),
         details: { baseScore: out.baseScore, severity: out.severity },
+      }
+    },
+  },
+  {
+    name: 'http_request',
+    description:
+      'Envoie une requête HTTP personnalisée (méthode, en-têtes, corps libres) vers une URL dont l’hôte appartient'
+      + ' au scope in-scope d’un programme, pour tester une vulnérabilité (injection, IDOR, CSRF, upload, SSRF…).'
+      + ' Aucune confirmation manuelle n’est requise : disponible d’emblée. Les cibles restent confinées aux hôtes'
+      + ' in-scope du programme, sous-domaines inclus ; tout autre hôte est refusé.'
+      + ' Bornes : http(s) uniquement, 1 MiB lus (max 2 MiB), 60 s de délai, redirections non suivies (le 3xx et son'
+      + ' Location sont renvoyés). Aucun cookie ni Authorization n’est ajouté implicitement. Toute invocation est'
+      + ' journalisée (Activité des IA). À n’utiliser que sur les cibles et selon les ROE du programme.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        programId: { ...STR, description: 'programme dont le scope autorise la cible' },
+        url: { ...STR, description: 'URL absolue http(s) dont l’hôte est in-scope' },
+        method: { type: 'string', enum: [...HTTP_METHODS], description: 'méthode HTTP, défaut GET' },
+        headers: { type: 'object', description: 'en-têtes personnalisés (valeurs chaînes)' },
+        body: { type: 'string', description: 'corps de la requête (POST/PUT/PATCH/DELETE)' },
+        maxBytes: { type: 'integer', minimum: 1024, maximum: 2_097_152, description: 'octets lus au maximum, défaut 1 MiB' },
+        timeoutMs: { type: 'integer', minimum: 1000, maximum: 60_000, description: 'délai en ms, défaut 20000' },
+      },
+      required: ['programId', 'url'],
+    },
+    handler: async (args) => {
+      const programId = asString(args.programId)
+      if (!programId) return { text: 'programId requis (chaîne 1-200)', isError: true }
+      const raw = asString(args.url, 2000)
+      if (!raw) return { text: 'url requis (chaîne 1-2000)', isError: true }
+      let u: URL
+      try {
+        u = new URL(raw)
+      } catch {
+        return { text: `URL invalide : ${raw}`, isError: true }
+      }
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return { text: `Protocole refusé (${u.protocol}) : seuls http et https sont acceptés`, isError: true }
+      }
+      const method = (typeof args.method === 'string' ? args.method : 'GET').toUpperCase()
+      if (!(HTTP_METHODS as readonly string[]).includes(method)) {
+        return { text: `Méthode refusée : ${method} (attendu ${HTTP_METHODS.join(', ')})`, isError: true }
+      }
+      const detail = await resolveProgramDetail(programId)
+      if (!detail) return { text: `Programme introuvable ou scope indisponible : ${programId}`, isError: true }
+      if (!isUrlInScope(detail.scope, u)) {
+        const allowed = inScopeHosts(detail.scope)
+        return {
+          text: `Hôte hors scope : ${u.hostname}. Cibles autorisées : ${allowed.join(', ') || '(aucune)'}`,
+          isError: true,
+        }
+      }
+      const maxBytes = args.maxBytes === undefined ? 1_048_576 : asInt(args.maxBytes, 1024, 2_097_152)
+      if (maxBytes === null) return { text: 'maxBytes doit être un entier entre 1024 et 2097152', isError: true }
+      const timeoutMs = args.timeoutMs === undefined ? 20_000 : asInt(args.timeoutMs, 1000, 60_000)
+      if (timeoutMs === null) return { text: 'timeoutMs doit être un entier entre 1000 et 60000', isError: true }
+
+      const headers = new Headers()
+      if (args.headers && typeof args.headers === 'object' && !Array.isArray(args.headers)) {
+        for (const [k, v] of Object.entries(args.headers as Record<string, unknown>)) {
+          if (typeof v === 'string') headers.set(k, v.slice(0, 2000))
+          else if (typeof v === 'number') headers.set(k, String(v))
+        }
+      }
+      let body: string | undefined
+      if (typeof args.body === 'string' && args.body.length > 0) {
+        if (method === 'GET' || method === 'HEAD') {
+          return { text: `Un corps n’est pas permis avec ${method}`, isError: true }
+        }
+        body = args.body.slice(0, 100_000)
+      }
+
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      const started = Date.now()
+      let res: Response
+      try {
+        res = await fetch(u.toString(), { method, headers, body, redirect: 'manual', signal: controller.signal })
+      } catch (err) {
+        clearTimeout(timer)
+        const aborted = err instanceof Error && err.name === 'AbortError'
+        return {
+          text: aborted ? `Délai dépassé (${timeoutMs} ms)` : `Requête échouée : ${err instanceof Error ? err.message : String(err)}`,
+          isError: true,
+        }
+      }
+      let buf: Buffer
+      try {
+        buf = Buffer.from(await res.arrayBuffer())
+      } catch (err) {
+        return { text: `Lecture de la réponse échouée : ${err instanceof Error ? err.message : String(err)}`, isError: true }
+      } finally {
+        clearTimeout(timer)
+      }
+      const truncated = buf.length > maxBytes
+      const outHeaders: Record<string, string> = {}
+      for (const [k, v] of res.headers) outHeaders[k] = v
+      const text = buf.subarray(0, maxBytes).toString('utf8')
+      return {
+        text: JSON.stringify(
+          {
+            url: u.toString(),
+            method,
+            status: res.status,
+            statusText: res.statusText,
+            location: res.headers.get('location'),
+            headers: outHeaders,
+            bytes: buf.length,
+            truncated,
+            elapsedMs: Date.now() - started,
+            body: text,
+          },
+          null,
+          2,
+        ),
+        details: { status: res.status, bytes: buf.length, truncated },
+      }
+    },
+  },
+  {
+    name: 'submit_report',
+    description:
+      'Assemble un rapport de vulnérabilité structuré (titre, sévérité/CVSS, description, étapes de reproduction,'
+      + ' impact, remédiation, preuve) et l’écrit en Markdown sous le dossier de données de Venari, dans'
+      + ' reports/<programId>/, prêt à transmettre. IMPORTANT : aucune soumission externe n’est effectuée — l’API'
+      + ' chercheur d’Intigriti est en lecture seule (aucun endpoint public de soumission). Le rapport renvoyé est un'
+      + ' fichier local ; la transmission reste manuelle. Renvoie le chemin absolu du fichier écrit.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        programId: { ...STR, description: 'programme concerné (doit exister localement)' },
+        title: { ...STR, description: 'titre du rapport' },
+        severity: { ...STR, description: 'niveau (info/low/medium/high/critical) ou vecteur CVSS' },
+        asset: { ...STR, description: 'cible affectée (URL, endpoint)' },
+        description: { type: 'string', description: 'description de la vulnérabilité' },
+        steps: { type: 'string', description: 'étapes de reproduction' },
+        impact: { type: 'string', description: 'impact concret' },
+        remediation: { type: 'string', description: 'remédiation suggérée' },
+        poc: { type: 'string', description: 'preuve (requête HTTP brute, sortie, capture)' },
+      },
+      required: ['programId', 'title', 'description'],
+    },
+    handler: async (args) => {
+      const programId = asString(args.programId)
+      const title = asString(args.title, 300)
+      const description = typeof args.description === 'string' ? args.description.trim().slice(0, 50_000) : ''
+      if (!programId) return { text: 'programId requis', isError: true }
+      if (!title) return { text: 'title requis (chaîne 1-300)', isError: true }
+      if (!description) return { text: 'description requise', isError: true }
+      const prog = getRepository().getProgram(programId)
+      if (!prog) return { text: `Programme inconnu : ${programId}`, isError: true }
+
+      const opt = (v: unknown, max: number): string => (typeof v === 'string' ? v.trim().slice(0, max) : '')
+      const severity = asString(args.severity, 200) ?? 'non évaluée'
+      const asset = opt(args.asset, 500)
+      const steps = opt(args.steps, 20_000)
+      const impact = opt(args.impact, 20_000)
+      const remediation = opt(args.remediation, 20_000)
+      const poc = opt(args.poc, 20_000)
+
+      const now = new Date()
+      const stamp = now.toISOString().replace(/[:.]/g, '-')
+      const slug = title
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60) || 'rapport'
+      const dir = join(app.getPath('userData'), 'reports', programId.replace(/[^a-z0-9._-]/gi, '_'))
+      const file = join(dir, `${stamp}-${slug}.md`)
+      const md = [
+        `# ${title}`,
+        '',
+        `- Programme : ${prog.name} (\`${programId}\`)`,
+        asset ? `- Cible : ${asset}` : null,
+        `- Sévérité : ${severity}`,
+        `- Généré : ${now.toISOString()}`,
+        '',
+        '## Description',
+        '',
+        description,
+        steps ? `\n## Étapes de reproduction\n\n${steps}` : null,
+        impact ? `\n## Impact\n\n${impact}` : null,
+        poc ? `\n## Preuve (PoC)\n\n\`\`\`\n${poc}\n\`\`\`` : null,
+        remediation ? `\n## Remédiation\n\n${remediation}` : null,
+        '',
+        '---',
+        'Rapport généré par Venari. Aucune soumission automatique : l’API Intigriti est en lecture seule.',
+        '',
+      ]
+        .filter((l): l is string => l !== null)
+        .join('\n')
+
+      try {
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(file, md, 'utf8')
+      } catch (err) {
+        return { text: `Écriture du rapport échouée : ${err instanceof Error ? err.message : String(err)}`, isError: true }
+      }
+      return {
+        text: JSON.stringify(
+          {
+            ok: true,
+            path: file,
+            program: prog.name,
+            title,
+            severity,
+            submitted: false,
+            note: 'Rapport écrit localement ; soumission manuelle requise (API Intigriti en lecture seule).',
+          },
+          null,
+          2,
+        ),
+        details: { path: file, submitted: false },
       }
     },
   },

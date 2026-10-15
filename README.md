@@ -74,6 +74,15 @@ node node_modules/electron/install.js
 
 Le typecheck suit la même ligne : `tsconfig.node.json` exclut les `*.tsx` (pas de JSX ni de DOM côté main), `tsconfig.web.json` les inclut. Comme Vitest tourne sans globales, l'auto-nettoyage de Testing Library ne s'active pas : chaque fichier TSX appelle `afterEach(cleanup)`.
 
+### Tests
+
+`npm run test` exécute tout le dossier `tests/` avec Vitest, en deux environnements :
+
+- `tests/*.test.ts` → `node` (main, preload, services, outils) ;
+- `tests/*.test.tsx` → **jsdom**, pour les composants React du renderer. Chaque fichier porte `// @vitest-environment jsdom` en première ligne et mock le pont preload via `vi.mock('../src/renderer/src/api')` : seul le mappage état → rendu est testé, l'IPC réel reste couvert par les tests de `src/main`.
+
+Le typecheck suit la même ligne : `tsconfig.node.json` exclut les `*.tsx` (pas de JSX ni de DOM côté main), `tsconfig.web.json` les inclut. Comme Vitest tourne sans globales, l'auto-nettoyage de Testing Library ne s'active pas : chaque fichier TSX appelle `afterEach(cleanup)`.
+
 ### Boîte (CLI d'agents)
 
 `boite` est une boîte à lettres locale pour coordonner des agents (IA ou humains), sans réseau ni politesse : uniquement des tâches et des ressources partagées. Les données vivent dans `~/.boite/boite.db` (surcharge avec `BOITE_DIR`), et les adresses ont la forme `thread-id` (machine locale) ou `machine/thread-id`.

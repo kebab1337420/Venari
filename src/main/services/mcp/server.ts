@@ -693,16 +693,7 @@ const TOOL_DEFS: McpToolDef[] = [
     handler: async (args) => {
       const programId = asString(args.programId)
       if (!programId) return { text: 'programId requis (chaîne 1-200)', isError: true }
-      let detail: ReturnType<typeof getCachedProgramDetail>
-      if (getClient().getToken()) {
-        try {
-          detail = await fetchProgramDetail(getClient(), programId)
-        } catch {
-          detail = getCachedProgramDetail(programId)
-        }
-      } else {
-        detail = getCachedProgramDetail(programId)
-      }
+      const detail = await resolveProgramDetail(programId)
       if (!detail) return { text: `Programme introuvable ou détail indisponible : ${programId}`, isError: true }
       return { text: JSON.stringify(detail, null, 2) }
     },

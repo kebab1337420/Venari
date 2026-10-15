@@ -1,7 +1,6 @@
 import { ipcMain, shell } from 'electron'
 import { z } from 'zod'
 import { IPC } from '../shared/ipc'
-import { getRepository } from './db'
 import { getClient } from './app-state'
 import { fetchProgramDetail, getCachedProgramDetail } from './services/program-detail'
 import {
@@ -117,8 +116,4 @@ export function registerDetailIpc(): void {
       return { ok: false, error: err instanceof Error ? err.message : String(err) } as const
     }
   })
-}
-
-export function hasProgramDetailCache(programId: string): boolean {
-  return getRepository().getProgramDetail(programId) !== null
 }

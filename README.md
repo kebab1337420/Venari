@@ -30,7 +30,7 @@ Autres prérequis communs :
 | Linux | `dist/venari-<version>.AppImage` | auto-portable : `chmod +x` puis lancer, aucun privilège requis |
 | Linux | `dist/venari_<version>_amd64.deb` | installation native via `apt install ./venari_<version>_amd64.deb` |
 
-`<version>` est la version déclarée dans `package.json` (0.2.0 au moment d'écrire).
+`<version>` est la version déclarée dans `package.json`.
 
 Au premier lancement, collez votre token Intigriti : il est testé auprès de l'API puis chiffré au repos (voir [Chiffrement](#chiffrement-au-repos)).
 
@@ -112,7 +112,7 @@ Le port MCP n'est volontairement pas vérifié par les jobs de smoke test : le s
 
 ### Scans low / med / high
 - Bouton **Scanner** dans le détail d'une mission : profils de profondeur — Bas (curl + nuclei low/medium), Moyen (+ tags tech/exposure, severities ≤ high), Élevé (+ ffuf, severities ≤ critical).
-- **Garde-fous** : cibles limitées au scope **in-scope** et aux endpoints HTTP(S) ; la confirmation ROE (`roeConfirm`) est optionnelle (le scan peut être lancé directement, y compris par une IA) ; les ROE restent respectées (si `automatedTooling: 0`, le scan est refusé) ; rate limit par scan ; bouton **Arrêter** toujours disponible ; tout est loggé dans `scan_events` ; exécution séquentielle, arrêt propre du process courant. Aucune soumission automatique : les rapports sont rédigés localement (`submit_report`).
+- **Garde-fous** : cibles limitées au scope **in-scope** et aux endpoints HTTP(S) ; la confirmation ROE (`roeConfirm`) est **requise** depuis l'interface (le scan ne démarre qu'après validation manuelle — seule l'outil MCP `start_scan` peut la rendre optionnelle) ; les ROE restent respectées (si `automatedTooling: 0`, le scan est refusé) ; rate limit par scan ; bouton **Arrêter** toujours disponible ; tout est loggé dans `scan_events` ; exécution séquentielle, arrêt propre du process courant. Aucune soumission automatique : les rapports sont rédigés localement (`submit_report`).
 - Si **aucun** outil du plan n'a pu être lancé, le scan se termine en `error` avec la liste des binaires manquants — il ne se présente jamais comme réussi.
 - **Un scan ne peut pas rester bloqué** : chaque étape a un plafond de 30 min (au-delà, l'outil est arrêté et le scan le dit), le flux est plafonné à 5 000 événements par scan (la troncature est annoncée, jamais silencieuse), et le bouton **Arrêter** tue l'outil *et* ses sous-processus — ffuf ou nuclei lancent des enfants, sans cela un scan orphelin continuerait après l'arrêt.
 
@@ -186,7 +186,7 @@ Les secrets (token Intigriti, credentials de mission, jetons MCP, token GitHub) 
 | Linux avec keyring (GNOME Keyring, KWallet, libsecret) | `safeStorage` |
 | Linux **sans** keyring (poste headless, session sans agent) | repli interne : AES-256-GCM, clé scrypt dérivée et stockée dans un fichier `0600` du dossier utilisateur |
 
-Le mécanisme réellement utilisé est visible dans l'app. Le repli AES-GCM protège le fichier au repos mais ne bénéficie pas dunir de session du système : sur un poste Linux sans keyring, préférez-en un.
+Le mécanisme réellement utilisé est visible dans l'app. Le repli AES-GCM protège le fichier au repos mais ne bénéficie pas du verrou de session du système : sur un poste Linux sans keyring, préférez-en un.
 
 ## Sécurité
 

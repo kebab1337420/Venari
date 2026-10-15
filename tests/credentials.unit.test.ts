@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { join } from 'node:path'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 
 const userData = mkdtempSync(join(tmpdir(), 'bountydesk-cred-test-'))

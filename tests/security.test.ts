@@ -1,6 +1,5 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
-import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 
 let capturedWillNavigate: ((event: any, url: string) => void) | null = null

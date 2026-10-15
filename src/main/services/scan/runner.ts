@@ -54,6 +54,12 @@ function binary(tool: string): string {
  */
 const STEP_TIMEOUT_MS = 30 * 60 * 1000
 
+/**
+ * Plafond global d'un scan : 4 etapes x un grand nombre de cibles pouvait
+ * durer des heures. Au-dela, le scan est arrete proprement.
+ */
+const TOTAL_TIMEOUT_MS = 60 * 60 * 1000
+
 /** Plafond d'événements conservés par scan : un outil bavard ne sature pas la base. */
 const MAX_EVENTS = 5000
 
@@ -63,6 +69,8 @@ export interface ScanRunnerOptions {
   stepTimeoutMs?: number
   /** Plafond d'événements conservés sur toute la durée du scan. */
   maxEvents?: number
+  /** Plafond de durée de tout le scan, en ms (défaut 60 min). */
+  totalTimeoutMs?: number
 }
 
 export class ScanRunner {
@@ -77,6 +85,8 @@ export class ScanRunner {
   private closed = false
   private readonly stepTimeoutMs: number
   private readonly maxEvents: number
+  private readonly totalTimeoutMs: number
+  private readonly deadline: number
 
   constructor(
     private readonly scanId: number,
@@ -84,7 +94,13 @@ export class ScanRunner {
   ) {
     this.stepTimeoutMs = options.stepTimeoutMs ?? STEP_TIMEOUT_MS
     this.maxEvents = options.maxEvents ?? MAX_EVENTS
+    this.totalTimeoutMs = options.totalTimeoutMs ?? TOTAL_TIMEOUT_MS
+    this.deadline = Date.now() + this.totalTimeoutMs
     runners.set(scanId, this)
+  }
+
+  private expired(): boolean {
+    return Date.now() >= this.deadline
   }
 
   isStopped(): boolean {
@@ -168,7 +184,7 @@ export class ScanRunner {
       const timedOutTools = new Set<string>()
       let ranTools = 0
       for (const step of plan.steps) {
-        if (this.stopped) break
+        if (this.stopped || this.expired()) break
         if (step.args.includes('MISSING_WORDLIST')) {
           const wl = resolveWordlist()
           if (wl) {
@@ -199,6 +215,10 @@ export class ScanRunner {
         }
         if (this.stopped) break
         await sleep(intervalMs)
+      }
+
+      if (!this.stopped && this.expired()) {
+        this.log('warn', `Plafond global de ${Math.round(this.totalTimeoutMs / 60000)} min atteint, scan arrêté avant la fin du plan`)
       }
 
       // On passe en écriture immédiate avant toute mise à jour du statut :

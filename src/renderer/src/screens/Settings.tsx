@@ -31,6 +31,8 @@ export function SettingsScreen({ onLogout }: Props) {
   const [agentNewLabel, setAgentNewLabel] = useState('')
   const [session, setSession] = useState<RemoteSessionInfo | null>(null)
   const [sessionHistory, setSessionHistory] = useState<RemoteSessionInfo[]>([])
+  // null = pas encore chargé (voir le bandeau « Chiffrement au repos »).
+  const [keyring, setKeyring] = useState<boolean | null>(null)
   const pendingRef = useRef(0)
   // Battement d'une seconde pendant qu'une demande de session attend une
   // décision : le compte à rebours et sa couleur restent exacts sans
@@ -115,6 +117,10 @@ export function SettingsScreen({ onLogout }: Props) {
 
   useEffect(() => {
     void refresh()
+    void Api.auth
+      .status()
+      .then((s) => setKeyring(s.keyring))
+      .catch(() => setKeyring(null))
     // Les sessions distantes arrivent d'un appareil externe : sans cet
     // auto-refresh, une demande « en attente » n'apparaît que si l'utilisateur
     // clique sur « Actualiser ». 10 s fait aussi défiler le compte à rebours.
@@ -764,6 +770,17 @@ export function SettingsScreen({ onLogout }: Props) {
             )}
           </div>
         )}
+      </div>
+
+      <div className="box" style={{ marginTop: 12 }}>
+        <h3>Chiffrement au repos</h3>
+        <p className="muted-text">
+          {keyring === null
+            ? 'Mécanisme de chiffrement en cours de vérification…'
+            : keyring
+              ? 'Trousseau du système : le jeton Intigriti, les credentials de mission et les jetons MCP sont chiffrés par Windows, GNOME Keyring ou KWallet.'
+              : 'Repli local AES-256-GCM : aucun trousseau système détecté (session Linux sans keyring). Les secrets sont chiffrés avec une clé rangée sur ce poste, protège au repos mais sans verrou de session — préférez installer un keyring.'}
+        </p>
       </div>
 
       <div style={{ marginTop: 12 }}>

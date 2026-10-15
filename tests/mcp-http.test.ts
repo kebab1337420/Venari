@@ -39,10 +39,17 @@ vi.mock('electron', () => ({
 vi.mock('../src/main/services/tools/installer', () => ({
   currentTools: async () => [],
   installTool: async (id: string) => ({ ok: true as const, installed: true }),
-  resolveBinary: () => null,
+  // 'nmap' est un outil du catalogue : on lui fait pointer vers l'interpreteur
+  // Node courant pour tester le lancement reel sans dependre d'un binaire tiers.
+  resolveBinary: (id: string) => (id === 'nmap' ? process.execPath : null),
   resolveWordlist: () => null,
   toolsDir: () => userData,
 }))
+
+// Les tests HTTP montent leurs serveurs sur 127.0.0.1 : on autorise la boucle
+// locale pour le filtre SSRF. Les tests dedies au filtre le desactivent le temps
+// d'une assertion (voir « filtre SSRF »).
+process.env['VENARI_ALLOW_PRIVATE_FETCH'] = '1'
 
 import { closeDb, getRepository } from '../src/main/db'
 import { startMcpServer, stopMcpServer } from '../src/main/services/mcp/server'
@@ -179,16 +186,16 @@ describe('serveur MCP (HTTP réel)', () => {
     }
   })
 
-  it('run_tool exécute un binaire PATH et retourne la sortie', async () => {
+  it('run_tool exécute un outil autorisé et retourne la sortie', async () => {
     const res = await rpc({
       jsonrpc: '2.0', id: 1, method: 'tools/call',
-      params: { name: 'run_tool', arguments: { tool: 'node', args: '-e "console.log(42)"' } },
+      params: { name: 'run_tool', arguments: { tool: 'nmap', args: '-e "console.log(42)"' } },
     })
     expect(res.status).toBe(200)
     const json = (await res.json()) as { result: { content: { text: string }[]; isError?: boolean } }
     expect(json.result.isError).toBeFalsy()
     const out = JSON.parse(json.result.content[0]!.text) as { exitCode: number; stdout: string; tool: string }
-    expect(out.tool).toBe('node')
+    expect(out.tool).toBe('nmap')
     expect(out.exitCode).toBe(0)
     expect(out.stdout.trim()).toBe('42')
   })
@@ -202,31 +209,47 @@ describe('serveur MCP (HTTP réel)', () => {
     expect(json.result.isError).toBe(true)
   })
 
-  it('run_tool refuse les interpréteurs de commande (allowline)', async () => {
-    for (const tool of ['powershell', 'cmd', 'mshta', 'run_tool']) {
+  it('run_tool refuse coquilles, interpréteurs et téléchargeurs', async () => {
+    const blocked = [
+      'powershell', 'cmd', 'mshta', 'run_tool',
+      'sh', 'bash', 'zsh', 'dash', 'busybox', 'env',
+      'node', 'python', 'python3', 'php', 'ruby', 'perl', 'java', 'go',
+      'curl', 'wget', 'nc', 'socat',
+    ]
+    for (const tool of blocked) {
       const res = await rpc({
         jsonrpc: '2.0', id: 1, method: 'tools/call',
-        params: { name: 'run_tool', arguments: { tool, args: '-enc dGVzdA==' } },
+        params: { name: 'run_tool', arguments: { tool, args: '-c "echo pwned"' } },
       })
       const json = (await res.json()) as { result: { content: { text: string }[]; isError: boolean } }
-      expect(json.result.isError).toBe(true)
+      expect(json.result.isError, `${tool} devrait être refusé`).toBe(true)
     }
   })
 
   it('run_tool refuse un cwd hors du dossier tools et les chemins réseau', async () => {
     const res1 = await rpc({
       jsonrpc: '2.0', id: 1, method: 'tools/call',
-      params: { name: 'run_tool', arguments: { tool: 'node', args: '-e "1"', cwd: 'C:\\Users\\Public' } },
+      params: { name: 'run_tool', arguments: { tool: 'nmap', args: '-e "1"', cwd: 'C:\\Users\\Public' } },
     })
     const j1 = (await res1.json()) as { result: { content: { text: string }[]; isError: boolean } }
     expect(j1.result.isError).toBe(true)
 
     const res2 = await rpc({
       jsonrpc: '2.0', id: 1, method: 'tools/call',
-      params: { name: 'run_tool', arguments: { tool: 'node', args: '-e "1"', cwd: '\\\\srv\\share' } },
+      params: { name: 'run_tool', arguments: { tool: 'nmap', args: '-e "1"', cwd: '\\\\srv\\share' } },
     })
     const j2 = (await res2.json()) as { result: { content: { text: string }[]; isError: boolean } }
     expect(j2.result.isError).toBe(true)
+  })
+
+  it('run_tool refuse la racine du dossier tools comme cwd', async () => {
+    const res = await rpc({
+      jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { name: 'run_tool', arguments: { tool: 'nmap', args: '-e "1"', cwd: userData } },
+    })
+    const json = (await res.json()) as { result: { content: { text: string }[]; isError: boolean } }
+    expect(json.result.isError).toBe(true)
+    expect(json.result.content[0]!.text).toContain('racine')
   })
 
   it('run_tool refuse un dossier voisin qui partage le préfixe du dossier tools', async () => {
@@ -237,7 +260,7 @@ describe('serveur MCP (HTTP réel)', () => {
     try {
       const res = await rpc({
         jsonrpc: '2.0', id: 1, method: 'tools/call',
-        params: { name: 'run_tool', arguments: { tool: 'node', args: '-e "1"', cwd: sibling } },
+        params: { name: 'run_tool', arguments: { tool: 'nmap', args: '-e "1"', cwd: sibling } },
       })
       const json = (await res.json()) as { result: { content: { text: string }[]; isError: boolean } }
       expect(json.result.isError).toBe(true)
@@ -546,6 +569,29 @@ describe('outils MCP ajoutés (notes, page, scans, dedupe, CVSS)', () => {
     expect(notFound.text).toContain('404')
   })
 
+  it('le filtre SSRF refuse une cible privée (fetch_page et http_request)', async () => {
+    const prev = process.env['VENARI_ALLOW_PRIVATE_FETCH']
+    delete process.env['VENARI_ALLOW_PRIVATE_FETCH']
+    try {
+      const meta = await callTool('fetch_page', { url: 'http://169.254.169.254/latest/meta-data/' })
+      expect(meta.isError).toBe(true)
+      expect(meta.text).toContain('privee')
+
+      const loop = await callTool('fetch_page', { url: `http://127.0.0.1:${pagePort}/page` })
+      expect(loop.isError).toBe(true)
+
+      seedScope('http://169.254.169.254')
+      const hr = await callTool('http_request', { programId: 'prog-1', url: 'http://169.254.169.254/' })
+      expect(hr.isError).toBe(true)
+      expect(hr.text).toContain('privee')
+
+      seedScope('https://exemple.test')
+    } finally {
+      if (prev === undefined) delete process.env['VENARI_ALLOW_PRIVATE_FETCH']
+      else process.env['VENARI_ALLOW_PRIVATE_FETCH'] = prev
+    }
+  })
+
   // --- set_note / list_notes ----------------------------------------------
   it('set_note ajoute des entrées horodatées sans écraser, list_notes les relit', async () => {
     const first = await callTool('set_note', { programId: 'prog-1', text: 'Sous-domaine staging à tester' })
@@ -695,6 +741,34 @@ describe('outils MCP ajoutés (notes, page, scans, dedupe, CVSS)', () => {
     expect((await callTool('http_request', { programId: 'prog-1', url: `http://127.0.0.1:${pagePort}/page`, method: 'TRACE' })).isError).toBe(true)
     expect((await callTool('http_request', { programId: 'prog-1', url: 'ftp://127.0.0.1/x' })).isError).toBe(true)
     expect((await callTool('http_request', { programId: 'prog-1', url: `http://127.0.0.1:${pagePort}/echo`, method: 'GET', body: 'x=1' })).isError).toBe(true)
+  })
+
+  it('http_request respecte le garde ROE (outils automatisés interdits)', async () => {
+    seedScope(`http://127.0.0.1:${pagePort}`)
+    getRepository().setProgramDetail(
+      'prog-1',
+      JSON.stringify([{ id: 'd1', type: 'in-scope', endpoint: `http://127.0.0.1:${pagePort}`, tier: 'tier1', description: '', inScope: true }]),
+      JSON.stringify({ automatedTooling: 0 }),
+      Date.now(),
+    )
+    const out = await callTool('http_request', { programId: 'prog-1', url: `http://127.0.0.1:${pagePort}/page` })
+    expect(out.isError).toBe(true)
+    expect(out.text).toContain('engagement')
+  })
+
+  it('le journal d’audit masque les en-têtes sensibles', async () => {
+    seedScope(`http://127.0.0.1:${pagePort}`)
+    await callTool('http_request', {
+      programId: 'prog-1',
+      url: `http://127.0.0.1:${pagePort}/echo`,
+      headers: { authorization: 'Bearer SUPER_SECRET_VALUE', 'x-api-key': 'clef-privee' },
+    })
+    const rows = getRepository().listMcpRequests(50).filter((r) => r.tool === 'http_request')
+    expect(rows.length).toBeGreaterThan(0)
+    const last = rows[0]!
+    expect(last.args_json).not.toContain('SUPER_SECRET_VALUE')
+    expect(last.args_json).not.toContain('clef-privee')
+    expect(last.args_json).toContain('***')
   })
 
   // --- submit_report -------------------------------------------------------

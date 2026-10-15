@@ -93,8 +93,12 @@ export class IntigritiClient {
     if (!token) {
       throw new AuthError('Jeton Intigriti absent. Connectez-vous.')
     }
-    await this.throttler.acquire()
-    return withRetry(() => this.singleRequest(token, path, query, schema), this.retryOptions)
+    // Le quota est acquis a chaque tentative : un retry immediat (Retry-After: 0)
+    // ne doit pas court-circuiter le throttler et marteler Intigriti.
+    return withRetry(async () => {
+      await this.throttler.acquire()
+      return this.singleRequest(token, path, query, schema)
+    }, this.retryOptions)
   }
 
   private async singleRequest<T>(token: string, path: string, query: QueryParams, schema: z.ZodType<T>): Promise<T> {

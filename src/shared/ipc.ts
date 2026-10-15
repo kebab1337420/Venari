@@ -60,6 +60,8 @@ export const IPC = {
 
 export interface AuthStatus {
   configured: boolean
+  /** true = secrets protégés par le trousseau du système, false = repli AES-GCM local. */
+  keyring: boolean
 }
 
 export interface AuthValidateResult {

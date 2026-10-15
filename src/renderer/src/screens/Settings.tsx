@@ -286,8 +286,6 @@ export function SettingsScreen({ onLogout }: Props) {
 
   const baseUrl = (host: string) => `http://${host}:${mcp?.port ?? '8787'}/mcp`
 
-  const agentWsUrl = (host: string) => `ws://${host}:${mcp?.port ?? '8787'}/agent`
-
   const connectAgent = (tokenId: string) =>
     run(async () => {
       const res = await Api.agent.sessionRequest(tokenId)

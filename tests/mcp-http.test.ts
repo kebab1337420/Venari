@@ -38,7 +38,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../src/main/services/tools/installer', () => ({
   currentTools: async () => [],
-  installTool: async (id: string) => ({ ok: true as const, installed: true }),
+  installTool: async (_id: string) => ({ ok: true as const, installed: true }),
   // 'nmap' est un outil du catalogue : on lui fait pointer vers l'interpreteur
   // Node courant pour tester le lancement reel sans dependre d'un binaire tiers.
   resolveBinary: (id: string) => (id === 'nmap' ? process.execPath : null),
@@ -690,7 +690,7 @@ describe('outils MCP ajoutés (notes, page, scans, dedupe, CVSS)', () => {
     expect((await callTool('dedupe_findings', { lines: [] })).isError).toBe(true)
     expect((await callTool('dedupe_findings', { scanId: 0 })).isError).toBe(true)
     expect((await callTool('dedupe_findings', { scanId: 9999 })).isError).toBe(true)
-    const tooMany = await callTool('dedupe_findings', { lines: new Array(501).fill('https://a.test/') })
+    const tooMany = await callTool('dedupe_findings', { lines: Array.from({ length: 501 }, () => 'https://a.test/') })
     expect(tooMany.isError).toBe(true)
   })
 

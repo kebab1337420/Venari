@@ -394,9 +394,8 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
 
     case 'wait': {
       const address = requireOne(rest, 'wait')
-      const result = await waitForState(db, address, {
-        ...(flags.timeout !== null ? { timeoutMs: flags.timeout } : {})
-      })
+      const opts = flags.timeout !== null ? { timeoutMs: flags.timeout } : {}
+      const result = await waitForState(db, address, opts)
       if (flags.json) {
         jsonOut(out, result)
         return 0

@@ -40,7 +40,6 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.ProgramsSync, async () => {
-    const repo = getRepository()
     const client = getClient()
     if (!client.getToken()) return { ok: false, error: 'Aucun token configuré' } as const
     const synced = await syncPrograms(client)

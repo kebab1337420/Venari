@@ -86,11 +86,6 @@ function toSessionInfo(row: RemoteSessionRow): RemoteSessionInfo {
   }
 }
 
-function infoOrNull(id: number): RemoteSessionInfo | null {
-  const row = rowFor(id)
-  return row ? toSessionInfo(row) : null
-}
-
 function sendJSON(ws: WebSocket, obj: unknown): void {
   const data = JSON.stringify(obj)
   if (ws.readyState === WebSocket.OPEN) {

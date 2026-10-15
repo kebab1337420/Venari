@@ -93,7 +93,9 @@ describe('source go (go install en GOBIN isolé)', () => {
     const install = fake.spawns.find((s) => s.args[0] === 'install')
 
     expect(result).toEqual({ ok: true, installed: true })
-    expect(install?.cmd).toBe('go')
+    // Le binaire `go` est résolu en chemin absolu (anti-détournement PATH) :
+    // on accepte le nom nu comme un chemin qui se termine par go(.exe).
+    expect(install?.cmd).toMatch(/^(?:.*[\\/])?go(?:\.exe)?$/i)
     expect(install?.args).toEqual(['install', 'github.com/tomnomnom/fff'])
     expect(install?.gobin).toBe(join(toolsDir(), 'fff'))
     expect(lines.join('\n')).toMatch(/go install github\.com\/tomnomnom\/fff/)

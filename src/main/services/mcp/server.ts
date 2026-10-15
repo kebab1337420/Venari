@@ -1,19 +1,23 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { spawn } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, createHash } from 'node:crypto'
+import { lookup as dnsLookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 import { networkInterfaces } from 'node:os'
-import { mkdirSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { app } from 'electron'
 import type { McpStatusInfo, ProgramDetailData, ScanDepth } from '../../../shared/ipc'
+import { Throttler } from '../../../services/intigriti'
 import { getClient } from '../../app-state'
 import { getRepository } from '../../db'
 import { fetchProgramDetail, getCachedProgramDetail } from '../program-detail'
-import { buildPlan, inScopeHosts, isUrlInScope, selectTargets, MAX_TARGETS } from '../scan/plan'
+import { buildPlan, inScopeHosts, isPrivateHost, isUrlInScope, selectTargets, MAX_TARGETS } from '../scan/plan'
 import { activeScanCount, activeScanForProgram, killTree, startScan } from '../scan/runner'
 import { getTool, TOOL_CATALOG } from '../tools/catalog'
 import { currentTools, installTool, resolveBinary, toolsDir } from '../tools/installer'
 import { attachAgentsToServer, closeAgents, configureAgents, type AgentAuthEntry } from './agents'
+import { startDiscoveryResponder, stopDiscoveryResponder } from './discover'
 import { openBrowserWindow } from '../../ipc-browser'
 // Version réelle du paquet : une constante en dur dérive dès le premier bump.
 import pkg from '../../../../package.json'
@@ -287,6 +291,36 @@ function isHttpUrl(u: URL): boolean {
   return (u.protocol === 'http:' || u.protocol === 'https:') && u.hostname !== ''
 }
 
+/**
+ * Filtre SSRF commun a fetch_page et http_request : refuse un hote prive ou
+ * local (loopback, RFC1918, link-local, metadonnees cloud) ou dont une adresse
+ * resolue est privee (anti DNS-rebinding partiel). Retourne le motif du refus,
+ * ou null si la cible est autorisee.
+ *
+ * `VENARI_ALLOW_PRIVATE_FETCH=1` n'est jamais positionne par l'application : il
+ * sert uniquement aux tests HTTP qui visent un serveur boucle locale.
+ */
+async function ssrfRefusal(u: URL): Promise<string | null> {
+  if (process.env['VENARI_ALLOW_PRIVATE_FETCH'] === '1') return null
+  const host = u.hostname.replace(/^\[/, '').replace(/\]$/, '')
+  if (!host) return 'Hote absent'
+  if (isPrivateHost(host)) return `Cible privee ou locale refusee : ${host}`
+  if (isIP(host) !== 0) return null
+  let addrs: { address: string }[]
+  try {
+    addrs = await dnsLookup(host, { all: true })
+  } catch {
+    return `Hote introuvable : ${host}`
+  }
+  for (const a of addrs) {
+    if (isPrivateHost(a.address)) return `Hote ${host} resout vers une adresse privee (${a.address})`
+  }
+  return null
+}
+
+/** Limiteur de debit des requetes http_request : borne les appels sortants. */
+const httpRequestThrottle = new Throttler({ capacity: 30, refillPerInterval: 10, refillIntervalMs: 1000 })
+
 /** Lit le corps en plafonnant les octets : au-dela, on coupe et on le signale. */
 async function readCapped(res: Response, maxBytes: number): Promise<{ buf: Buffer; truncated: boolean }> {
   const body = res.body
@@ -331,6 +365,16 @@ type PageResult =
 async function fetchPageText(startUrl: string, maxBytes: number): Promise<PageResult> {
   let current = startUrl
   for (let hop = 0; hop <= PAGE_MAX_REDIRECTS; hop++) {
+    let cur: URL
+    try {
+      cur = new URL(current)
+    } catch {
+      return { ok: false, error: `URL illisible : ${current}` }
+    }
+    // Le filtre est réappliqué à chaque saut : une redirection ne doit pas
+    // ramener vers une cible privée (loopback, RFC1918, métadonnées cloud).
+    const refusal = await ssrfRefusal(cur)
+    if (refusal) return { ok: false, error: refusal }
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), PAGE_TIMEOUT_MS)
     let res: Response
@@ -441,22 +485,32 @@ const DENY_TOOLS = new Set([
   // PowerShell reste refuse : equivalent de shell systeme sur Windows, et
   // dispose de.cmdlets d'execution memoire que le suivi d'argv ne couvre pas.
   'cmd', 'powershell', 'pwsh',
+  // Runtimes et chaines du catalogue : le catalogue expose des binaires qui
+  // sont eux-memes de l'execution arbitraire (node -e, python -c, go run,
+  // git -c alias.x=!cmd, uv pip…). Les laisser passer via getTool aurait
+  // redonne aux porteurs de jeton exactement le RCE refuse par SAFE_TOOLS.
+  'node', 'nodejs', 'python', 'python3', 'py', 'go', 'golang', 'uv',
+  'deno', 'bun', 'php', 'ruby', 'perl', 'lua', 'java', 'jdk', 'pip', 'npm', 'npx',
+  'awk', 'sed', 'find', 'make', 'cmake', 'gcc', 'g++', 'curl', 'wget',
+  'nc', 'ncat', 'socat',
 ])
 const SAFE_TOOLS = new Set([
-  // Interpretation et langages
-  'node', 'python', 'python3', 'python2', 'py', 'nodejs', 'php', 'ruby', 'perl', 'java', 'dotnet',
-  'go', 'rustc', 'deno', 'bun',
-  // Coquilles et utilitaires systeme
-  'sh', 'bash', 'zsh', 'ksh', 'dash', 'busybox', 'env',
-  'git', 'tar', 'jq', 'yq', 'rg', 'fd', 'make', 'cmake', 'gcc', 'cl',
-  // Reseau et web
-  'curl', 'wget', 'http', 'httpie', 'ping', 'dig', 'nslookup', 'host', 'whois', 'traceroute', 'tracert',
-  'netstat', 'ss', 'ip', 'ifconfig', 'openssl', 'nc', 'ncat', 'socat',
-  // Fichiers et texte
-  'cat', 'head', 'tail', 'wc', 'sort', 'uniq', 'cut', 'tr', 'tee', 'sed', 'awk', 'grep', 'find',
-  'ls', 'mkdir', 'cp', 'mv', 'rm', 'touch', 'chmod', 'base64', 'xxd', 'diff', 'patch',
-  // Analyse
-  'strings', 'file', 'stat', 'du', 'df',
+  // Utilitaires sans point d'execution en ligne de commande : aucun d'eux ne
+  // lance un sous-processus arbitraire a partir de ses arguments (pas de
+  // `sh -c`, `python -c`, `awk system()`, `sed e`, `find -exec`, `fd --exec`,
+  // `tar --to-command`, `git -c alias.x=!cmd`, `curl`/`wget` de telechargement).
+  // Toute coquille, interpreteur, chaine d'outils ou telechargeur est exclu :
+  // ils annulaient DENY_TOOLS et donnerent un RCE a tout porteur de jeton.
+  // Lecture / comparaison de texte
+  'cat', 'head', 'tail', 'wc', 'sort', 'uniq', 'cut', 'tr', 'tee', 'grep',
+  'diff', 'patch', 'strings', 'base64', 'xxd', 'rg',
+  // Fichiers et repertoires (aucune execution)
+  'ls', 'mkdir', 'cp', 'mv', 'rm', 'touch', 'chmod', 'stat', 'file', 'du', 'df',
+  // Donnees structurees
+  'jq', 'yq',
+  // Diagnostic reseau (sondes, jamais de relais ni de telechargement)
+  'ping', 'dig', 'nslookup', 'host', 'whois', 'traceroute', 'tracert',
+  'netstat', 'ss', 'ip', 'ifconfig',
 ])
 
 function isAllowedRunTool(tool: string): boolean {
@@ -470,10 +524,11 @@ const runToolDef: McpToolDef = {
   name: 'run_tool',
   description:
     'Exécute un binaire du catalogue Venari (portable dans le dossier tools de Venari, ou binaire PATH comme'
-    + ' nmap/ffuf) ou un binaire système de confiance (interpréteurs : node, python, php, ruby, perl, java, go ;'
-    + ' coquilles : sh, bash ; réseau : curl, wget, openssl, dig ; fichiers : cat, grep, sed, awk, find).'
-    + ' en une chaîne, cwd optionnel (doit être sous le dossier tools de Venari), timeout par défaut 120 s. Toute'
-    + ' invocation est journalisée (Activité des IA). À n’utiliser que sur des cibles autorisées, dans le scope et selon les ROE.',
+    + ' nmap/ffuf) ou un utilitaire système sans exécution arbitraire (lecture/texte/réseau : cat, grep, jq, rg,'
+    + ' dig, ping, base64…). Les coquilles, interpréteurs et téléchargeurs (sh, bash, node, python, curl, wget…)'
+    + ' sont refusés. Les arguments forment une chaîne unique, cwd optionnel (sous-dossier existant du dossier tools'
+    + ' de Venari, jamais sa racine), timeout par défaut 120 s. Toute invocation est journalisée (Activité des IA).'
+    + ' À n’utiliser que sur des cibles autorisées, dans le scope et selon les ROE.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -507,10 +562,26 @@ const runToolDef: McpToolDef = {
       } catch {
         return { text: 'cwd invalide : n’existe pas', isError: true }
       }
-      const root = toolsRoot.toLowerCase().replace(/[\\/]+$/, '')
-      const insideRoot = lower === root || lower.startsWith(root + '\\') || lower.startsWith(root + '/')
+      // Chemins réels : une jonction ou un lien symbolique sous tools ne doit pas
+      // faire passer un dossier situé ailleurs (C:\Windows, etc.).
+      let realRoot: string
+      let realAbs: string
+      try {
+        realRoot = realpathSync(toolsRoot)
+        realAbs = realpathSync(abs)
+      } catch {
+        return { text: 'cwd invalide : chemin non résolvable', isError: true }
+      }
+      const root = realRoot.toLowerCase().replace(/[\\/]+$/, '')
+      const realLower = realAbs.toLowerCase()
+      const insideRoot = realLower === root || realLower.startsWith(root + '\\') || realLower.startsWith(root + '/')
       if (!insideRoot) {
         return { text: 'cwd hors périmètre autorisé (dossier tools Venari)', isError: true }
+      }
+      // La racine elle-même est réservée : c'est le dossier inscriptible que
+      // visait le détournement de binaire (un faux git.exe y serait résolu).
+      if (realLower === root) {
+        return { text: 'cwd refusé : la racine du dossier tools est réservée à Venari', isError: true }
       }
       cwd = abs
     }
@@ -622,16 +693,7 @@ const TOOL_DEFS: McpToolDef[] = [
     handler: async (args) => {
       const programId = asString(args.programId)
       if (!programId) return { text: 'programId requis (chaîne 1-200)', isError: true }
-      let detail: ReturnType<typeof getCachedProgramDetail>
-      if (getClient().getToken()) {
-        try {
-          detail = await fetchProgramDetail(getClient(), programId)
-        } catch {
-          detail = getCachedProgramDetail(programId)
-        }
-      } else {
-        detail = getCachedProgramDetail(programId)
-      }
+      const detail = await resolveProgramDetail(programId)
       if (!detail) return { text: `Programme introuvable ou détail indisponible : ${programId}`, isError: true }
       return { text: JSON.stringify(detail, null, 2) }
     },
@@ -1154,6 +1216,9 @@ const TOOL_DEFS: McpToolDef[] = [
       }
       const detail = await resolveProgramDetail(programId)
       if (!detail) return { text: `Programme introuvable ou scope indisponible : ${programId}`, isError: true }
+      if (detail.roe && detail.roe.automatedTooling === 0) {
+        return { text: 'Les règles d’engagement interdisent les outils automatisés pour ce programme', isError: true }
+      }
       if (!isUrlInScope(detail.scope, u)) {
         const allowed = inScopeHosts(detail.scope)
         return {
@@ -1161,6 +1226,11 @@ const TOOL_DEFS: McpToolDef[] = [
           isError: true,
         }
       }
+      // Un programme peut déclarer un hôte privé en scope : on refuse quand même
+      // (SSRF), puis on borne le débit pour ne pas violer les ROE ni saturer la cible.
+      const refusal = await ssrfRefusal(u)
+      if (refusal) return { text: refusal, isError: true }
+      await httpRequestThrottle.acquire()
       const maxBytes = args.maxBytes === undefined ? 1_048_576 : asInt(args.maxBytes, 1024, 2_097_152)
       if (maxBytes === null) return { text: 'maxBytes doit être un entier entre 1024 et 2097152', isError: true }
       const timeoutMs = args.timeoutMs === undefined ? 20_000 : asInt(args.timeoutMs, 1000, 60_000)
@@ -1196,17 +1266,21 @@ const TOOL_DEFS: McpToolDef[] = [
         }
       }
       let buf: Buffer
+      let truncated: boolean
       try {
-        buf = Buffer.from(await res.arrayBuffer())
+        // Lecture plafonnée en flux : `arrayBuffer()` chargeait le corps entier en
+        // mémoire avant troncature, ce qu'une cible in-scope pouvait faire exploser.
+        const capped = await readCapped(res, maxBytes)
+        buf = capped.buf
+        truncated = capped.truncated
       } catch (err) {
         return { text: `Lecture de la réponse échouée : ${err instanceof Error ? err.message : String(err)}`, isError: true }
       } finally {
         clearTimeout(timer)
       }
-      const truncated = buf.length > maxBytes
       const outHeaders: Record<string, string> = {}
       for (const [k, v] of res.headers) outHeaders[k] = v
-      const text = buf.subarray(0, maxBytes).toString('utf8')
+      const text = buf.toString('utf8')
       return {
         text: JSON.stringify(
           {
@@ -1278,7 +1352,11 @@ const TOOL_DEFS: McpToolDef[] = [
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .slice(0, 60) || 'rapport'
-      const dir = join(app.getPath('userData'), 'reports', programId.replace(/[^a-z0-9._-]/gi, '_'))
+      const safeId = programId.replace(/[^a-z0-9._-]/gi, '_')
+      if (safeId === '.' || safeId === '..' || safeId.length === 0) {
+        return { text: `programId invalide : ${programId}`, isError: true }
+      }
+      const dir = join(app.getPath('userData'), 'reports', safeId)
       const file = join(dir, `${stamp}-${slug}.md`)
       const md = [
         `# ${title}`,
@@ -1336,6 +1414,13 @@ let currentPort: number | null = null
 let currentLan = false
 let currentTokens: string[] = []
 let tokenLabels = new Map<string, string>()
+let currentPairId: string | null = null
+
+export type PairingRedeem = (code: string) => Promise<{ ok: true; token: string; label: string } | { ok: false; error: string }>
+
+// Branche l'appairage sur le stockage : le serveur ne connait ni le coffre de
+// jetons ni la config, il delegue la verification du code au processus principal.
+let pairingRedeem: PairingRedeem | null = null
 
 function labelFor(token: string): string {
   const known = tokenLabels.get(token)
@@ -1356,18 +1441,25 @@ function localHosts(): string[] {
 }
 
 export function isPrivateNetwork(): boolean {
+  let saw = false
   for (const addrs of Object.values(networkInterfaces())) {
     for (const a of addrs ?? []) {
       if (a.family !== 'IPv4' || a.internal) continue
+      saw = true
       const parts = a.address.split('.')
       const first = Number(parts[0] ?? 0)
       const second = Number(parts[1] ?? 0)
-      if (first === 10) return true
-      if (first === 172 && second >= 16 && second <= 31) return true
-      if (first === 192 && second === 168) return true
+      const priv =
+        first === 10 ||
+        (first === 172 && second >= 16 && second <= 31) ||
+        (first === 192 && second === 168)
+      // Une seule interface publique (Wi-Fi public, VPN) rend l'exposition LAN
+      // inacceptable : on exige que TOUTES les interfaces non-internes le soient,
+      // sinon 0.0.0.0 exposerait le serveur au réseau public.
+      if (!priv) return false
     }
   }
-  return false
+  return saw
 }
 
 export function generateMcpToken(): string {
@@ -1378,10 +1470,15 @@ export function generateMcpTokenId(): string {
   return randomBytes(6).toString('hex')
 }
 
-/** Representation non reversible d'un jeton : les 4 derniers caracteres suffisent a le distinguer. */
+/**
+ * Representation non reversible d'un jeton. On n'affiche aucun caractere du
+ * secret : une empreinte SHA-256 tronquee laisse l'operateur distinguer deux
+ * jetons sans divulguer le moindre bit exploitable.
+ */
 export function maskToken(token: string | null | undefined): string {
   if (!token) return ''
-  return `••••••••${token.slice(-4)}`
+  const fingerprint = createHash('sha256').update(token).digest('hex').slice(0, 4)
+  return `••••••••${fingerprint}`
 }
 
 /** Jeton en clair, pour le processus principal uniquement (jamais renvoye au renderer). */
@@ -1401,6 +1498,25 @@ export function getMcpStatus(): McpStatusInfo {
   }
 }
 
+/** Identifiant public du processus serveur, renvoye par la decouverte et l'appairage. */
+export function getMcpPairId(): string | null {
+  return currentPairId
+}
+
+export function setPairingRedeem(fn: PairingRedeem | null): void {
+  pairingRedeem = fn
+}
+
+/**
+ * Ajoute un jeton au serveur *deja en ecoute*, sans redemarrage : l'appairage
+ * repond sur la connexion en cours, qu'un `closeServer()` interromprait.
+ * La persistance reste a la charge de l'appelant.
+ */
+export function addMcpToken(token: string, label: string): void {
+  currentTokens = [...currentTokens, token]
+  tokenLabels.set(token, label)
+}
+
 export function setMcpTokens(tokens: string[], labels?: Map<string, string>): void {
   currentTokens = [...tokens]
   tokenLabels = labels ? new Map(labels) : new Map()
@@ -1411,13 +1527,27 @@ export function setMcpToken(token: string | null): void {
   tokenLabels = new Map()
 }
 
+/** Cles dont la valeur ne doit jamais atterrir dans le journal d'audit en clair. */
+const SECRET_KEY = /authorization|cookie|proxy-authorization|x-api-key|api[-_]?key|token|secret|password|passwd|pwd/i
+
+/** Recopie les arguments en masquant les valeurs sensibles (en-tetes, jetons). */
+function redactSecrets(value: unknown, depth = 0): unknown {
+  if (depth > 6 || value === null || typeof value !== 'object') return value
+  if (Array.isArray(value)) return value.map((v) => redactSecrets(v, depth + 1))
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = SECRET_KEY.test(k) ? '***' : redactSecrets(v, depth + 1)
+  }
+  return out
+}
+
 function audit(tokenLabel: string, tool: string, args: unknown, status: string, ms: number, remoteIp = ''): void {
   try {
     getRepository().appendMcpRequest({
       ts: Date.now(),
       tokenLabel,
       tool,
-      argsJson: typeof args === 'string' ? args : JSON.stringify(args ?? {}),
+      argsJson: typeof args === 'string' ? args : JSON.stringify(redactSecrets(args) ?? {}),
       status,
       ms,
       remoteIp,
@@ -1485,8 +1615,111 @@ function authedToken(req: IncomingMessage): string | null {
   return null
 }
 
+/**
+ * Un client MCP legitime (curl, SDK, agent distant) n'envoie pas d'en-tete de
+ * contexte navigateur. La presence d'un Origin/Referer trahit un appel emis par
+ * une page web (CSRF, DNS-rebinding) : on refuse avant meme l'authentification.
+ */
+function hasBrowserOrigin(req: IncomingMessage): boolean {
+  return typeof req.headers.origin === 'string' || typeof req.headers.referer === 'string'
+}
+
+/** Bornes anti-bruteforce : des echecs d'authentification repetes depuis une meme IP. */
+const AUTH_FAIL_LIMIT = 20
+const AUTH_FAIL_WINDOW_MS = 60_000
+const authFailures = new Map<string, { count: number; resetAt: number }>()
+
+function tooManyAuthFailures(ip: string): boolean {
+  const entry = authFailures.get(ip)
+  if (!entry) return false
+  if (Date.now() >= entry.resetAt) {
+    authFailures.delete(ip)
+    return false
+  }
+  return entry.count >= AUTH_FAIL_LIMIT
+}
+
+function noteAuthFailure(ip: string): void {
+  const now = Date.now()
+  const entry = authFailures.get(ip)
+  if (!entry || now >= entry.resetAt) {
+    authFailures.set(ip, { count: 1, resetAt: now + AUTH_FAIL_WINDOW_MS })
+    return
+  }
+  entry.count += 1
+}
+
+/** Remet a zero le compteur d'echecs d'authentification (arret du serveur, tests). */
+export function resetMcpAuthFailures(): void {
+  authFailures.clear()
+}
+
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+  // Decouverte : document public, sans jeton, qui expose de quoi appairer un
+  // poste (pairId, port, hotes). Aucun secret n'y figure.
+  if (url.pathname === '/.well-known/venari.json') {
+    if (req.method !== 'GET') {
+      res.writeHead(405, { Allow: 'GET' })
+      res.end()
+      return
+    }
+    sendJson(res, 200, {
+      app: 'Venari',
+      version: pkg.version,
+      pairId: currentPairId,
+      port: currentPort,
+      lan: currentLan,
+      hosts: localHosts(),
+      pairing: currentPairId !== null,
+      mcp: '/mcp',
+    })
+    return
+  }
+  // Appairage : echange un code a usage unique contre un jeton dedie. Le code
+  // est verifie par le processus principal (TTL + tentatives), pas ici.
+  if (url.pathname === '/pair') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { Allow: 'POST' })
+      res.end()
+      return
+    }
+    if (!req.headers['content-type']?.startsWith('application/json')) {
+      sendJson(res, 415, { ok: false, error: 'content-type application/json requis' })
+      return
+    }
+    if (!pairingRedeem) {
+      sendJson(res, 503, { ok: false, error: 'Appairage indisponible sur ce serveur.' })
+      return
+    }
+    let code = ''
+    try {
+      const parsed = JSON.parse(await readBody(req)) as { code?: unknown }
+      if (typeof parsed.code === 'string') code = parsed.code
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'JSON invalide' })
+      return
+    }
+    if (!code) {
+      sendJson(res, 400, { ok: false, error: 'Code manquant.' })
+      return
+    }
+    const result = await pairingRedeem(code)
+    if (!result.ok) {
+      sendJson(res, 400, { ok: false, error: result.error })
+      return
+    }
+    sendJson(res, 200, {
+      ok: true,
+      token: result.token,
+      label: result.label,
+      port: currentPort,
+      lan: currentLan,
+      hosts: localHosts(),
+      mcp: '/mcp',
+    })
+    return
+  }
   if (url.pathname !== '/mcp') {
     sendJson(res, 404, { error: 'not found' })
     return
@@ -1496,13 +1729,22 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     res.end()
     return
   }
+  if (hasBrowserOrigin(req)) {
+    sendJson(res, 403, { error: 'requete navigateur refusee' })
+    return
+  }
   if (!req.headers['content-type']?.startsWith('application/json')) {
     sendJson(res, 415, { error: 'content-type application/json requis' })
     return
   }
-  const authed = authedToken(req)
   const remoteIp = req.socket.remoteAddress ?? ''
+  if (tooManyAuthFailures(remoteIp)) {
+    sendJson(res, 429, { jsonrpc: '2.0', id: null, error: { code: -32002, message: 'Too Many Requests' } })
+    return
+  }
+  const authed = authedToken(req)
   if (!authed) {
+    noteAuthFailure(remoteIp)
     audit('', '_unauthorized', {}, '401', 0, remoteIp)
     sendJson(res, 401, { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unauthorized' } })
     return
@@ -1574,6 +1816,9 @@ function closeServer(): Promise<void> {
   currentLan = false
   currentTokens = []
   tokenLabels = new Map()
+  authFailures.clear()
+  currentPairId = null
+  stopDiscoveryResponder()
   closeAgents()
   if (!s) return Promise.resolve()
   return new Promise((resolve) => {
@@ -1613,6 +1858,8 @@ export async function startMcpServer(
       currentTokens = []
       tokenLabels = new Map()
       currentLan = false
+      currentPairId = null
+      stopDiscoveryResponder()
       // Le serveur n'a jamais écouté : `server` n'est pas renseigné, donc
       // closeServer() ne nettoiera pas les timers/WSS montés par
       // attachAgentsToServer — on les referme ici, sinon ils restent actifs.
@@ -1631,6 +1878,19 @@ export async function startMcpServer(
       const addr = srv.address()
       const actualPort = typeof addr === 'object' && addr !== null ? addr.port : port
       currentPort = actualPort
+      // Identifiant public du processus, regenere a chaque demarrage : la
+      // decouverte et l'appairage designent la meme instance, sans exposer de secret.
+      currentPairId = randomBytes(6).toString('base64url')
+      startDiscoveryResponder(() => ({
+        app: 'Venari',
+        version: pkg.version,
+        pairId: currentPairId,
+        port: actualPort,
+        lan: currentLan,
+        hosts: localHosts(),
+        pairing: true,
+        mcp: '/mcp',
+      }))
       configureAgents(agentEntries)
       resolve({ ok: true, port: actualPort })
     })

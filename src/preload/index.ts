@@ -57,6 +57,8 @@ const bridge: BountyDeskBridge = {
     diagnose: () => ipcRenderer.invoke(IPC.McpDiagnose),
     firewallFix: () => ipcRenderer.invoke(IPC.McpFirewallFix),
     machines: (limit?: number) => ipcRenderer.invoke(IPC.McpMachines, { limit: limit ?? null }),
+    pairingCreate: () => ipcRenderer.invoke(IPC.McpPairingCreate),
+    pairingCancel: () => ipcRenderer.invoke(IPC.McpPairingCancel),
   },
   agent: {
     tokens: () => ipcRenderer.invoke(IPC.AgentTokens),

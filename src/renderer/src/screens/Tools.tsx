@@ -52,21 +52,33 @@ export function ToolsScreen() {
 
   const load = async () => {
     setError('')
-    const res = await Api.tools.list()
-    if (res.ok) {
-      setTools(res.tools)
-      setSelected((prev) => {
-        const next = new Set(prev)
-        if (next.size === 0) {
-          for (const t of res.tools) if (t.defaultChecked) next.add(t.id)
-        }
-        return next
-      })
-    } else {
-      setError(res.error)
+    // Un rejet IPC laisserait tools à null et l'écran bloqué sur
+    // « Vérification… » : on remonte l'erreur et on rend une liste vide.
+    try {
+      const res = await Api.tools.list()
+      if (res.ok) {
+        setTools(res.tools)
+        setSelected((prev) => {
+          const next = new Set(prev)
+          if (next.size === 0) {
+            for (const t of res.tools) if (t.defaultChecked) next.add(t.id)
+          }
+          return next
+        })
+      } else {
+        setError(res.error)
+        setTools([])
+      }
+    } catch (err) {
+      setError(`Chargement des outils impossible : ${err instanceof Error ? err.message : String(err)}`)
+      setTools([])
     }
-    const ghs = await Api.tools.githubTokenStatus()
-    if (ghs.ok) setGhConfigured(ghs.configured)
+    try {
+      const ghs = await Api.tools.githubTokenStatus()
+      if (ghs.ok) setGhConfigured(ghs.configured)
+    } catch {
+      setGhMsg('Statut du jeton GitHub indisponible.')
+    }
   }
 
   useEffect(() => {
@@ -295,7 +307,7 @@ export function ToolsScreen() {
       ) : shownCount === 0 ? (
         <div className="box">
           <p className="muted" style={{ margin: 0 }}>
-            Aucun outil ne correspond à ce filtre.
+            {error ? 'Liste des outils indisponible (voir ci-dessus).' : 'Aucun outil ne correspond à ce filtre.'}
           </p>
         </div>
       ) : (

@@ -122,18 +122,24 @@ function decryptFallback(payload: string): string | null {
   }
 }
 
-function encrypt(text: string): string {
+/**
+ * Chiffrement des secrets hors config (credentials de mission, …) :
+ * trousseau système quand il est là, repli AES-GCM local sinon.
+ * Le préfixe `aesgcm.v1.` identifie le repli ; tout le reste est du safeStorage.
+ */
+export function encryptSecret(text: string): string {
   if (safeStorage.isEncryptionAvailable()) {
     return safeStorage.encryptString(text).toString('base64')
   }
   return encryptFallback(text)
 }
 
-function decrypt(base64: string): string | null {
-  if (base64.startsWith(FALLBACK_PREFIX)) return decryptFallback(base64)
+/** @returns null quand le secret est illisible (clé perdue, safeStorage absent). */
+export function decryptSecret(payload: string): string | null {
+  if (payload.startsWith(FALLBACK_PREFIX)) return decryptFallback(payload)
   if (!safeStorage.isEncryptionAvailable()) return null
   try {
-    return safeStorage.decryptString(Buffer.from(base64, 'base64'))
+    return safeStorage.decryptString(Buffer.from(payload, 'base64'))
   } catch {
     return null
   }
@@ -149,12 +155,12 @@ export function loadToken(): string | null {
   if (typeof config.tokenEncrypted !== 'string' || config.tokenEncrypted.length === 0) {
     return null
   }
-  return decrypt(config.tokenEncrypted)
+  return decryptSecret(config.tokenEncrypted)
 }
 
 export function saveToken(token: string): void {
   const config = readConfig()
-  config.tokenEncrypted = encrypt(token)
+  config.tokenEncrypted = encryptSecret(token)
   writeConfig(config)
 }
 
@@ -173,12 +179,12 @@ export function loadGithubToken(): string | null {
   if (typeof config.githubTokenEncrypted !== 'string' || config.githubTokenEncrypted.length === 0) {
     return null
   }
-  return decrypt(config.githubTokenEncrypted)
+  return decryptSecret(config.githubTokenEncrypted)
 }
 
 export function saveGithubToken(token: string): void {
   const config = readConfig()
-  config.githubTokenEncrypted = encrypt(token)
+  config.githubTokenEncrypted = encryptSecret(token)
   writeConfig(config)
 }
 
@@ -214,12 +220,12 @@ function storedTokens(list: McpTokenStored[] | undefined, legacy: string | undef
     return list.flatMap((t) => {
       if (typeof t.id !== 'string' || typeof t.label !== 'string') return []
       if (typeof t.tokenEncrypted !== 'string' || t.tokenEncrypted.length === 0) return []
-      const token = decrypt(t.tokenEncrypted)
+      const token = decryptSecret(t.tokenEncrypted)
       return token !== null ? [{ id: t.id, label: t.label, token }] : []
     })
   }
   if (typeof legacy === 'string' && legacy.length > 0) {
-    const token = decrypt(legacy)
+    const token = decryptSecret(legacy)
     return token !== null ? [{ id: PRIMARY_ID, label: 'PC principal', token }] : []
   }
   return []
@@ -246,8 +252,8 @@ export function saveMcpConfig(cfg: { enabled: boolean; port: number | null; lan:
     enabled: cfg.enabled,
     port: cfg.port ?? undefined,
     lan: cfg.lan,
-    tokens: cfg.tokens.map((t) => ({ id: t.id, label: t.label, tokenEncrypted: encrypt(t.token) })),
-    agents: (cfg.agents ?? []).map((t) => ({ id: t.id, label: t.label, tokenEncrypted: encrypt(t.token) })),
+    tokens: cfg.tokens.map((t) => ({ id: t.id, label: t.label, tokenEncrypted: encryptSecret(t.token) })),
+    agents: (cfg.agents ?? []).map((t) => ({ id: t.id, label: t.label, tokenEncrypted: encryptSecret(t.token) })),
   }
   writeConfig(config)
 }

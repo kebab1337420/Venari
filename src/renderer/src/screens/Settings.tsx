@@ -5,6 +5,7 @@ import type {
   AgentTokenInfo,
   McpDiagnoseInfo,
   McpMachineInfo,
+  McpPairingInfo,
   McpRequestRow,
   McpStatusInfo,
   RemoteSessionInfo,
@@ -31,17 +32,36 @@ export function SettingsScreen({ onLogout }: Props) {
   const [agentNewLabel, setAgentNewLabel] = useState('')
   const [session, setSession] = useState<RemoteSessionInfo | null>(null)
   const [sessionHistory, setSessionHistory] = useState<RemoteSessionInfo[]>([])
+  // null = pas encore chargé (voir le bandeau « Chiffrement au repos »).
+  const [keyring, setKeyring] = useState<boolean | null>(null)
+  const [pairing, setPairing] = useState<McpPairingInfo | null>(null)
   const pendingRef = useRef(0)
   // Battement d'une seconde pendant qu'une demande de session attend une
   // décision : le compte à rebours et sa couleur restent exacts sans
   // recharger quoi que ce soit.
   const [, setPendingTick] = useState(0)
+  // Meme battement pour l'expiration du code d'appairage.
+  const [pairTick, setPairTick] = useState(0)
 
   useEffect(() => {
     if (!session || session.status !== 'pending') return
     const ticker = setInterval(() => setPendingTick((x) => x + 1), 1000)
     return () => clearInterval(ticker)
   }, [session])
+
+  useEffect(() => {
+    if (!pairing) return
+    const ticker = setInterval(() => setPairTick((x) => x + 1), 1000)
+    return () => clearInterval(ticker)
+  }, [pairing])
+
+  // Secondes restantes avant expiration du code. La dependance sur pairTick
+  // force le recalcul a chaque battement.
+  const pairingSecondsLeft = pairing ? Math.max(0, Math.round((pairing.expiresAt - Date.now()) / 1000)) : 0
+  useEffect(() => {
+    if (pairing && pairingSecondsLeft <= 0) setPairing(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pairTick, pairing])
 
   const loadRequests = async () => {
     const res = await Api.mcp.requests(50)
@@ -115,6 +135,10 @@ export function SettingsScreen({ onLogout }: Props) {
 
   useEffect(() => {
     void refresh()
+    void Api.auth
+      .status()
+      .then((s) => setKeyring(s.keyring))
+      .catch(() => setKeyring(null))
     // Les sessions distantes arrivent d'un appareil externe : sans cet
     // auto-refresh, une demande « en attente » n'apparaît que si l'utilisateur
     // clique sur « Actualiser ». 10 s fait aussi défiler le compte à rebours.
@@ -225,6 +249,26 @@ export function SettingsScreen({ onLogout }: Props) {
       setMcp(res.status)
     })
 
+  const createPairing = () =>
+    run(async () => {
+      const res = await Api.mcp.pairingCreate()
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      setPairing(res.pairing)
+    })
+
+  const cancelPairing = () =>
+    run(async () => {
+      const res = await Api.mcp.pairingCancel()
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      setPairing(null)
+    })
+
   const revoke = (id: string, label: string) =>
     run(async () => {
       if (!mcp || mcp.tokens.length <= 1) {
@@ -241,8 +285,6 @@ export function SettingsScreen({ onLogout }: Props) {
     })
 
   const baseUrl = (host: string) => `http://${host}:${mcp?.port ?? '8787'}/mcp`
-
-  const agentWsUrl = (host: string) => `ws://${host}:${mcp?.port ?? '8787'}/agent`
 
   const connectAgent = (tokenId: string) =>
     run(async () => {
@@ -698,6 +740,41 @@ export function SettingsScreen({ onLogout }: Props) {
                   </div>
                 </div>
 
+                <div className="mcp-box">
+                  <h4>Appairer un poste par code</h4>
+                  <p className="muted-text">
+                    Sur le poste à connecter, lancez <code>npm run mcp:pair</code> (ou{' '}
+                    <code>node scripts/pair.cjs</code>) : il découvre ce serveur sur le réseau local, puis demande le
+                    code ci-dessous. Le code est à usage unique et expire au bout de 5 minutes.
+                  </p>
+                  {pairing ? (
+                    <div className="mcp-row">
+                      <code className="pairing-code">{pairing.code}</code>
+                      <span className="muted-text">expire dans {pairingSecondsLeft} s</span>
+                      <button
+                        className="btn ghost small"
+                        onClick={() => void copy(pairing.code, 'paircode')}
+                      >
+                        {copied === 'paircode' ? 'Copié ✓' : 'Copier'}
+                      </button>
+                      <button className="btn ghost small" disabled={busy} onClick={() => void cancelPairing()}>
+                        Annuler
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mcp-row">
+                      <button
+                        className="btn primary small"
+                        disabled={busy || !mcp.running}
+                        onClick={() => void createPairing()}
+                      >
+                        Générer un code d'appairage
+                      </button>
+                      {!mcp.running && <span className="muted-text">Activez le serveur MCP d'abord.</span>}
+                    </div>
+                  )}
+                </div>
+
                 <details className="mcp-config">
                   <summary>Configuration Claude Desktop / opencode</summary>
                   <p className="muted-text">
@@ -714,10 +791,11 @@ export function SettingsScreen({ onLogout }: Props) {
                 </details>
 
                 <p className="muted-text">
-                  Outils disponibles (16) : <code>list_programs</code> (paginé),{' '}
+                  Outils disponibles (18) : <code>list_programs</code> (paginé),{' '}
                   <code>get_program_detail</code>, <code>list_credentials</code> (sans secret),{' '}
                   <code>set_note</code>, <code>list_notes</code>, <code>list_tools</code>,{' '}
                   <code>install_tool</code>, <code>open_browser</code>, <code>fetch_page</code>,{' '}
+                  <code>http_request</code>, <code>submit_report</code>,{' '}
                   <code>list_scans</code>, <code>start_scan</code>, <code>get_scan</code>,{' '}
                   <code>scan_events</code>, <code>dedupe_findings</code>, <code>cvss_score</code>,{' '}
                   <code>run_tool</code>.
@@ -764,6 +842,17 @@ export function SettingsScreen({ onLogout }: Props) {
             )}
           </div>
         )}
+      </div>
+
+      <div className="box" style={{ marginTop: 12 }}>
+        <h3>Chiffrement au repos</h3>
+        <p className="muted-text">
+          {keyring === null
+            ? 'Mécanisme de chiffrement en cours de vérification…'
+            : keyring
+              ? 'Trousseau du système : le jeton Intigriti, les credentials de mission et les jetons MCP sont chiffrés par Windows, GNOME Keyring ou KWallet.'
+              : 'Repli local AES-256-GCM : aucun trousseau système détecté (session Linux sans keyring). Les secrets sont chiffrés avec une clé rangée sur ce poste, protège au repos mais sans verrou de session — préférez installer un keyring.'}
+        </p>
       </div>
 
       <div style={{ marginTop: 12 }}>

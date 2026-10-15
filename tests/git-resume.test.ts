@@ -22,6 +22,10 @@ vi.mock('node:child_process', () => ({
 
 import { installTool } from '../src/main/services/tools/installer'
 
+// Le binaire `git` est résolu en chemin absolu (anti-détournement PATH) : on
+// reconnaît le nom nu comme un chemin qui se termine par git(.exe).
+const isGit = (cmd: unknown): boolean => /^(?:.*[\\/])?git(?:\.exe)?$/i.test(String(cmd))
+
 function childMock(code: number) {
   return {
     stdout: { on: vi.fn() },
@@ -43,19 +47,19 @@ describe('installTool — reprise d’un clone git complet sans marqueur', () =>
     writeFileSync(join(dest, 'README.md'), 'r')
 
     spawnMock.mockImplementation((cmd: string, args: string[], _opts: unknown) => {
-      if (cmd === 'git' && args[0] === '-C') return childMock(0)
+      if (isGit(cmd) && args[0] === '-C') return childMock(0)
       return childMock(1)
     })
 
     const res = await installTool('seclists')
     expect(res.ok).toBe(true)
     expect(spawnMock).toHaveBeenCalledWith(
-      'git',
+      expect.stringMatching(/^(?:.*[\\/])?git(?:\.exe)?$/i),
       ['-C', dest, 'rev-parse', '--verify', 'HEAD'],
       expect.anything()
     )
     const cloneCalls = spawnMock.mock.calls.filter(
-      (c) => c[0] === 'git' && Array.isArray(c[1]) && c[1][0] === 'clone'
+      (c) => isGit(c[0]) && Array.isArray(c[1]) && c[1][0] === 'clone'
     )
     expect(cloneCalls).toHaveLength(0)
   })
@@ -74,7 +78,7 @@ describe('installTool — reprise d’un clone git complet sans marqueur', () =>
     const res = await installTool('seclists')
     expect(res.ok).toBe(true)
     const cloneCalls = spawnMock.mock.calls.filter(
-      (c) => c[0] === 'git' && Array.isArray(c[1]) && c[1][0] === 'clone'
+      (c) => isGit(c[0]) && Array.isArray(c[1]) && c[1][0] === 'clone'
     )
     expect(cloneCalls).toHaveLength(1)
   })

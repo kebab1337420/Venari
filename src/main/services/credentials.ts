@@ -1,24 +1,22 @@
-import { safeStorage } from 'electron'
+import { decryptSecret, encryptSecret } from '../storage'
 import { getRepository } from '../db'
 import type { CredentialInput, CredentialRecord } from '../../shared/ipc'
 
+/**
+ * Meme politique de chiffrement que config.json (storage.ts) : trousseau
+ * systeme quand il est disponible, repli AES-256-GCM local sinon — un poste
+ * Linux sans keyring doit pouvoir enregistrer ses credentials, comme il peut
+ * deja enregistrer son token Intigriti. Le prefixe `enc:` marque une valeur
+ * chiffrée (toute valeur sans ce prefixe est refusee a la lecture).
+ */
 function encrypt(secret: string): string {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('Chiffrement safeStorage indisponible : refus d’enregistrer le secret en clair')
-  }
-  return 'enc:' + safeStorage.encryptString(secret).toString('base64')
+  return 'enc:' + encryptSecret(secret)
 }
 
 /** @returns null quand le secret est illisible (clé perdue, safeStorage absent). */
 function decrypt(enc: string): string | null {
   if (!enc || !enc.startsWith('enc:')) return null
-  if (!safeStorage.isEncryptionAvailable()) return null
-  try {
-    return safeStorage.decryptString(Buffer.from(enc.slice(4), 'base64'))
-  } catch (err) {
-    console.error('Échec de déchiffrement du credential:', err)
-    return null
-  }
+  return decryptSecret(enc.slice(4))
 }
 
 export function listCredentials(programId: string): CredentialRecord[] {

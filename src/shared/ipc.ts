@@ -46,6 +46,8 @@ export const IPC = {
   McpDiagnose: 'mcp:diagnose',
   McpFirewallFix: 'mcp:firewallFix',
   McpMachines: 'mcp:machines',
+  McpPairingCreate: 'mcp:pairingCreate',
+  McpPairingCancel: 'mcp:pairingCancel',
   AgentTokens: 'agent:tokens',
   AgentTokenAdd: 'agent:tokenAdd',
   AgentTokenRevoke: 'agent:tokenRevoke',
@@ -60,6 +62,8 @@ export const IPC = {
 
 export interface AuthStatus {
   configured: boolean
+  /** true = secrets protégés par le trousseau du système, false = repli AES-GCM local. */
+  keyring: boolean
 }
 
 export interface AuthValidateResult {
@@ -102,7 +106,7 @@ export interface ProgramsPage {
   total: number
 }
 
-export type ExportFormat = 'csv' | 'json'
+export type ExportFormat = 'csv' | 'json' | 'md'
 
 /**
  * L'export se fait via un sélecteur de fichier du système : le renderer ne
@@ -320,6 +324,20 @@ export type McpDiagnoseResult = { ok: true; diag: McpDiagnoseInfo } | DbFail
 
 export type McpFirewallFixResult = { ok: true; firewall: McpFirewallState } | DbFail
 
+/** Code d'appairage a usage unique, montre a l'humain qui le dicte au poste a connecter. */
+export interface McpPairingInfo {
+  code: string
+  expiresAt: number
+  pairId: string
+  port: number | null
+  lan: boolean
+  hosts: string[]
+}
+
+export type McpPairingCreateResult = { ok: true; pairing: McpPairingInfo } | DbFail
+
+export type McpPairingCancelResult = DbResult
+
 export interface AgentTokenInfo {
   id: string
   label: string
@@ -430,6 +448,8 @@ export interface BountyDeskBridge {
     diagnose(): Promise<McpDiagnoseResult>
     firewallFix(): Promise<McpFirewallFixResult>
     machines(limit?: number): Promise<McpMachinesResult>
+    pairingCreate(): Promise<McpPairingCreateResult>
+    pairingCancel(): Promise<McpPairingCancelResult>
   }
   agent: {
     tokens(): Promise<AgentTokensResult>

@@ -18,7 +18,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../src/main/services/tools/installer', () => ({
   currentTools: async () => [],
-  installTool: async (id: string) => ({ ok: true as const, installed: true }),
+  installTool: async (_id: string) => ({ ok: true as const, installed: true }),
   resolveBinary: () => null,
   resolveWordlist: () => null,
   toolsDir: () => userData,
@@ -75,7 +75,21 @@ function waitInbox<T = unknown>(inbox: InboxEntry[], timeout = 3000): Promise<T>
 
 function connectAgent(token?: string): Promise<Link> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/agent${token ? `?token=${token}` : ''}`)
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/agent`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+    const inbox = makeInbox(ws)
+    ws.once('open', () => resolve({ ws, inbox }))
+    ws.once('unexpected-response', (_req, res) => {
+      reject(new Error(`upgrade refusé HTTP ${res.statusCode}`))
+    })
+    ws.once('error', (err) => reject(err))
+  })
+}
+
+function connectAgentViaUrl(token: string): Promise<Link> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/agent?token=${token}`)
     const inbox = makeInbox(ws)
     ws.once('open', () => resolve({ ws, inbox }))
     ws.once('unexpected-response', (_req, res) => {
@@ -122,6 +136,10 @@ describe('vision distante (agent WS + sessions)', () => {
   it('refuse l’agent sans jeton ou avec un mauvais jeton (HTTP 401)', async () => {
     await expect(connectAgent()).rejects.toThrow('401')
     await expect(connectAgent('mauvais-jeton')).rejects.toThrow('401')
+  })
+
+  it('refuse un jeton passé dans l’URL (le jeton ne voyage que dans le header)', async () => {
+    await expect(connectAgentViaUrl(AGENT_TOKEN)).rejects.toThrow('401')
   })
 
   it('accueille un agent avec un jeton valide et le marque en ligne', async () => {

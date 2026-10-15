@@ -30,7 +30,7 @@ function hexV4ToDotted(part: string): string | null {
   return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`
 }
 
-function isPrivateHost(rawHost: string): boolean {
+export function isPrivateHost(rawHost: string): boolean {
   // new URL() laisse les crochets autour des IPv6 et peut garder un point final.
   const h = rawHost.replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '').toLowerCase()
   if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.internal')) return true

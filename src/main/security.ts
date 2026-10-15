@@ -51,7 +51,6 @@ const PROD_CSP = [
 
 export function installSecurity(): void {
   const dev = !app.isPackaged
-  const devServerUrl = process.env['ELECTRON_RENDERER_URL']
   const csp = dev
     ? PROD_CSP.replace("connect-src 'none'", "connect-src 'self' ws://localhost:*")
     : PROD_CSP

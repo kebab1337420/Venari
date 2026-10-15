@@ -17,6 +17,8 @@ import {
   type McpDiagnoseResult,
   type McpFirewallFixResult,
   type McpMachinesResult,
+  type McpPairingCancelResult,
+  type McpPairingCreateResult,
   type McpRegenerateResult,
   type McpRequestsResult,
   type McpSetEnabledResult,
@@ -33,15 +35,19 @@ import {
 } from './storage'
 import { getRepository } from './db'
 import {
+  addMcpToken,
   generateMcpToken,
   generateMcpTokenId,
+  getMcpPairId,
   getMcpStatus,
   getPrimaryMcpToken,
   isPrivateNetwork,
   maskToken,
+  setPairingRedeem,
   startMcpServer,
   stopMcpServer,
 } from './services/mcp/server'
+import { createPairingCode, currentPairing, redeemPairingCode, resetPairing } from './services/mcp/pairing'
 import {
   agentSessions,
   agentStatuses,
@@ -319,6 +325,22 @@ async function restartIfRunning(cfg: {
 }
 
 export function registerMcpIpc(): void {
+  // L'appairage echange un code a usage unique contre un jeton dedie. Le jeton
+  // est ajoute au serveur *sans redemarrage* (la requete /pair en cours serait
+  // coupee) puis persiste, pour qu'un redemarrage le conserve.
+  setPairingRedeem(async (code) => {
+    const redeemed = redeemPairingCode(code)
+    if (!redeemed.ok) return redeemed
+    const cfg = loadMcpConfig()
+    const id = generateMcpTokenId()
+    const token = generateMcpToken()
+    const label = 'Poste appairé'
+    const tokens = [...cfg.tokens, { id, label, token }]
+    saveMcpConfig({ enabled: cfg.enabled, port: cfg.port, lan: cfg.lan, tokens, agents: cfg.agents })
+    addMcpToken(token, label)
+    return { ok: true, token, label }
+  })
+
   ipcMain.handle(IPC.McpStatus, (): McpStatusInfo => {
     return joinStatus(getMcpStatus())
   })
@@ -499,6 +521,40 @@ export function registerMcpIpc(): void {
     } catch (err) {
       return handleError(err)
     }
+  })
+
+  ipcMain.handle(IPC.McpPairingCreate, (): McpPairingCreateResult => {
+    try {
+      const info = getMcpStatus()
+      if (!info.running) {
+        return { ok: false, error: 'Activez le serveur MCP avant d’appairer un poste.' }
+      }
+      const pairId = getMcpPairId()
+      if (!pairId) {
+        return { ok: false, error: 'Paire indisponible : redémarrez le serveur MCP.' }
+      }
+      // Un code deja actif est renvoye tel quel : regenerer a chaque clic
+      // invaliderait un code que l'utilisateur vient de dicter.
+      const pairing = currentPairing() ?? createPairingCode()
+      return {
+        ok: true,
+        pairing: {
+          code: pairing.code,
+          expiresAt: pairing.expiresAt,
+          pairId,
+          port: info.port,
+          lan: info.lan,
+          hosts: info.hosts,
+        },
+      }
+    } catch (err) {
+      return handleError(err)
+    }
+  })
+
+  ipcMain.handle(IPC.McpPairingCancel, (): McpPairingCancelResult => {
+    resetPairing()
+    return { ok: true }
   })
 
   ipcMain.handle(IPC.AgentTokens, (): AgentTokensResult => {

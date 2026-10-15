@@ -1331,6 +1331,17 @@ select {
   font-size: 12px;
 }
 
+.pairing-code {
+  background: var(--bg0);
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  color: var(--accent);
+}
+
 .mcp-table {
   width: 100%;
   border-collapse: collapse;

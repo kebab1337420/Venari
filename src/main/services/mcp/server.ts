@@ -17,6 +17,7 @@ import { activeScanCount, activeScanForProgram, killTree, startScan } from '../s
 import { getTool, TOOL_CATALOG } from '../tools/catalog'
 import { currentTools, installTool, resolveBinary, toolsDir } from '../tools/installer'
 import { attachAgentsToServer, closeAgents, configureAgents, type AgentAuthEntry } from './agents'
+import { startDiscoveryResponder, stopDiscoveryResponder } from './discover'
 import { openBrowserWindow } from '../../ipc-browser'
 // Version réelle du paquet : une constante en dur dérive dès le premier bump.
 import pkg from '../../../../package.json'
@@ -1422,6 +1423,13 @@ let currentPort: number | null = null
 let currentLan = false
 let currentTokens: string[] = []
 let tokenLabels = new Map<string, string>()
+let currentPairId: string | null = null
+
+export type PairingRedeem = (code: string) => Promise<{ ok: true; token: string; label: string } | { ok: false; error: string }>
+
+// Branche l'appairage sur le stockage : le serveur ne connait ni le coffre de
+// jetons ni la config, il delegue la verification du code au processus principal.
+let pairingRedeem: PairingRedeem | null = null
 
 function labelFor(token: string): string {
   const known = tokenLabels.get(token)
@@ -1497,6 +1505,25 @@ export function getMcpStatus(): McpStatusInfo {
     masked: maskToken(currentTokens[0]),
     tokens: currentTokens.map((t) => ({ id: labelFor(t) || '?', label: labelFor(t) || 'PC', masked: maskToken(t) })),
   }
+}
+
+/** Identifiant public du processus serveur, renvoye par la decouverte et l'appairage. */
+export function getMcpPairId(): string | null {
+  return currentPairId
+}
+
+export function setPairingRedeem(fn: PairingRedeem | null): void {
+  pairingRedeem = fn
+}
+
+/**
+ * Ajoute un jeton au serveur *deja en ecoute*, sans redemarrage : l'appairage
+ * repond sur la connexion en cours, qu'un `closeServer()` interromprait.
+ * La persistance reste a la charge de l'appelant.
+ */
+export function addMcpToken(token: string, label: string): void {
+  currentTokens = [...currentTokens, token]
+  tokenLabels.set(token, label)
 }
 
 export function setMcpTokens(tokens: string[], labels?: Map<string, string>): void {
@@ -1638,6 +1665,70 @@ export function resetMcpAuthFailures(): void {
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+  // Decouverte : document public, sans jeton, qui expose de quoi appairer un
+  // poste (pairId, port, hotes). Aucun secret n'y figure.
+  if (url.pathname === '/.well-known/venari.json') {
+    if (req.method !== 'GET') {
+      res.writeHead(405, { Allow: 'GET' })
+      res.end()
+      return
+    }
+    sendJson(res, 200, {
+      app: 'Venari',
+      version: pkg.version,
+      pairId: currentPairId,
+      port: currentPort,
+      lan: currentLan,
+      hosts: localHosts(),
+      pairing: currentPairId !== null,
+      mcp: '/mcp',
+    })
+    return
+  }
+  // Appairage : echange un code a usage unique contre un jeton dedie. Le code
+  // est verifie par le processus principal (TTL + tentatives), pas ici.
+  if (url.pathname === '/pair') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { Allow: 'POST' })
+      res.end()
+      return
+    }
+    if (!req.headers['content-type']?.startsWith('application/json')) {
+      sendJson(res, 415, { ok: false, error: 'content-type application/json requis' })
+      return
+    }
+    if (!pairingRedeem) {
+      sendJson(res, 503, { ok: false, error: 'Appairage indisponible sur ce serveur.' })
+      return
+    }
+    let code = ''
+    try {
+      const parsed = JSON.parse(await readBody(req)) as { code?: unknown }
+      if (typeof parsed.code === 'string') code = parsed.code
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'JSON invalide' })
+      return
+    }
+    if (!code) {
+      sendJson(res, 400, { ok: false, error: 'Code manquant.' })
+      return
+    }
+    const result = await pairingRedeem(code)
+    if (!result.ok) {
+      sendJson(res, 400, { ok: false, error: result.error })
+      return
+    }
+    sendJson(res, 200, {
+      ok: true,
+      token: result.token,
+      label: result.label,
+      port: currentPort,
+      lan: currentLan,
+      hosts: localHosts(),
+      mcp: '/mcp',
+    })
+    return
+  }
   if (url.pathname !== '/mcp') {
     sendJson(res, 404, { error: 'not found' })
     return
@@ -1735,6 +1826,8 @@ function closeServer(): Promise<void> {
   currentTokens = []
   tokenLabels = new Map()
   authFailures.clear()
+  currentPairId = null
+  stopDiscoveryResponder()
   closeAgents()
   if (!s) return Promise.resolve()
   return new Promise((resolve) => {
@@ -1774,6 +1867,8 @@ export async function startMcpServer(
       currentTokens = []
       tokenLabels = new Map()
       currentLan = false
+      currentPairId = null
+      stopDiscoveryResponder()
       // Le serveur n'a jamais écouté : `server` n'est pas renseigné, donc
       // closeServer() ne nettoiera pas les timers/WSS montés par
       // attachAgentsToServer — on les referme ici, sinon ils restent actifs.
@@ -1792,6 +1887,19 @@ export async function startMcpServer(
       const addr = srv.address()
       const actualPort = typeof addr === 'object' && addr !== null ? addr.port : port
       currentPort = actualPort
+      // Identifiant public du processus, regenere a chaque demarrage : la
+      // decouverte et l'appairage designent la meme instance, sans exposer de secret.
+      currentPairId = randomBytes(6).toString('base64url')
+      startDiscoveryResponder(() => ({
+        app: 'Venari',
+        version: pkg.version,
+        pairId: currentPairId,
+        port: actualPort,
+        lan: currentLan,
+        hosts: localHosts(),
+        pairing: true,
+        mcp: '/mcp',
+      }))
       configureAgents(agentEntries)
       resolve({ ok: true, port: actualPort })
     })

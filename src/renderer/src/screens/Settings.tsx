@@ -5,6 +5,7 @@ import type {
   AgentTokenInfo,
   McpDiagnoseInfo,
   McpMachineInfo,
+  McpPairingInfo,
   McpRequestRow,
   McpStatusInfo,
   RemoteSessionInfo,
@@ -33,17 +34,34 @@ export function SettingsScreen({ onLogout }: Props) {
   const [sessionHistory, setSessionHistory] = useState<RemoteSessionInfo[]>([])
   // null = pas encore chargé (voir le bandeau « Chiffrement au repos »).
   const [keyring, setKeyring] = useState<boolean | null>(null)
+  const [pairing, setPairing] = useState<McpPairingInfo | null>(null)
   const pendingRef = useRef(0)
   // Battement d'une seconde pendant qu'une demande de session attend une
   // décision : le compte à rebours et sa couleur restent exacts sans
   // recharger quoi que ce soit.
   const [, setPendingTick] = useState(0)
+  // Meme battement pour l'expiration du code d'appairage.
+  const [pairTick, setPairTick] = useState(0)
 
   useEffect(() => {
     if (!session || session.status !== 'pending') return
     const ticker = setInterval(() => setPendingTick((x) => x + 1), 1000)
     return () => clearInterval(ticker)
   }, [session])
+
+  useEffect(() => {
+    if (!pairing) return
+    const ticker = setInterval(() => setPairTick((x) => x + 1), 1000)
+    return () => clearInterval(ticker)
+  }, [pairing])
+
+  // Secondes restantes avant expiration du code. La dependance sur pairTick
+  // force le recalcul a chaque battement.
+  const pairingSecondsLeft = pairing ? Math.max(0, Math.round((pairing.expiresAt - Date.now()) / 1000)) : 0
+  useEffect(() => {
+    if (pairing && pairingSecondsLeft <= 0) setPairing(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pairTick, pairing])
 
   const loadRequests = async () => {
     const res = await Api.mcp.requests(50)
@@ -229,6 +247,26 @@ export function SettingsScreen({ onLogout }: Props) {
       }
       setNewLabel('')
       setMcp(res.status)
+    })
+
+  const createPairing = () =>
+    run(async () => {
+      const res = await Api.mcp.pairingCreate()
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      setPairing(res.pairing)
+    })
+
+  const cancelPairing = () =>
+    run(async () => {
+      const res = await Api.mcp.pairingCancel()
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      setPairing(null)
     })
 
   const revoke = (id: string, label: string) =>
@@ -702,6 +740,41 @@ export function SettingsScreen({ onLogout }: Props) {
                       + Ajouter un jeton
                     </button>
                   </div>
+                </div>
+
+                <div className="mcp-box">
+                  <h4>Appairer un poste par code</h4>
+                  <p className="muted-text">
+                    Sur le poste à connecter, lancez <code>npm run mcp:pair</code> (ou{' '}
+                    <code>node scripts/pair.cjs</code>) : il découvre ce serveur sur le réseau local, puis demande le
+                    code ci-dessous. Le code est à usage unique et expire au bout de 5 minutes.
+                  </p>
+                  {pairing ? (
+                    <div className="mcp-row">
+                      <code className="pairing-code">{pairing.code}</code>
+                      <span className="muted-text">expire dans {pairingSecondsLeft} s</span>
+                      <button
+                        className="btn ghost small"
+                        onClick={() => void copy(pairing.code, 'paircode')}
+                      >
+                        {copied === 'paircode' ? 'Copié ✓' : 'Copier'}
+                      </button>
+                      <button className="btn ghost small" disabled={busy} onClick={() => void cancelPairing()}>
+                        Annuler
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mcp-row">
+                      <button
+                        className="btn primary small"
+                        disabled={busy || !mcp.running}
+                        onClick={() => void createPairing()}
+                      >
+                        Générer un code d'appairage
+                      </button>
+                      {!mcp.running && <span className="muted-text">Activez le serveur MCP d'abord.</span>}
+                    </div>
+                  )}
                 </div>
 
                 <details className="mcp-config">

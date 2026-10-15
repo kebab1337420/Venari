@@ -62,6 +62,7 @@ node node_modules/electron/install.js
 | `npm run dist:all` | les deux plateformes (à lancer sur chaque OS : un AppImage ne se cross-build pas de façon fiable) |
 | `npm run dist` | alias de `dist:win` (compatibilité) |
 | `npm run boite -- <args>` | CLI `boite` — boîte de coordination d'agents (voir ci-dessous) |
+| `npm run mcp:pair` | appaire un poste au serveur MCP : découverte LAN + échange de code contre un jeton (voir [MCP](#mcp-ia)) |
 
 ### Tests
 
@@ -156,6 +157,7 @@ Détails qui comptent :
 - Adresse du serveur (locale et LAN) copiable en 1 clic, et un tableau **Activité des IA** journalise chaque appel d'outil (poste, outil, statut, durée).
 - **Outils MCP** (18) : `list_programs` (paginé : `limit` / `offset`, total annoncé dans `details`), `get_program_detail`, `list_credentials` (sans secret), `set_note` / `list_notes` (notes horodatées, lecture seule pour la seconde), `list_tools`, `install_tool`, `open_browser`, `fetch_page`, `list_scans`, `start_scan` (mêmes garde-fous que l'UI, `roeConfirm` optionnel), `get_scan`, `scan_events`, `dedupe_findings`, `cvss_score`, `run_tool` (exécution *encadrée* d'un binaire du catalogue, whitelist stricte par défaut), `http_request` (requête HTTP personnalisée confinée aux hôtes *in-scope* du programme, sans confirmation), `submit_report` (rapport Markdown écrit dans `reports/`, **aucune soumission externe**).
 - Exemple de config `claude_desktop_config.json` / `opencode.json` fourni dans l'app.
+- **Appairage sans config manuelle** : l'app affiche un **code à usage unique (6 caractères, 5 minutes)** ; sur le poste à connecter, `npm run mcp:pair` découvre le serveur sur le réseau local (sonde UDP, repli loopback), échange le code contre un **jeton dédié** et imprime la config MCP prête à coller. Le serveur répond aussi à `GET /.well-known/venari.json` (pairId, port, hôtes — **aucun jeton**) et à `POST /pair`.
 - Pare-feu : l'app vérifie l'état de la règle d'ouverture du port et sait la créer — `netsh` sous Windows, `ufw` / `firewall-cmd` via `pkexec` sous Linux. Sur les autres plateformes, l'état est honnêtement rapporté « non géré ». La règle est **limitée au réseau privé** (profils `private` sous Windows, sources RFC1918 sous Linux) et **retirée à la désactivation du serveur**.
 - **Le mode LAN n'est accordé que sur un réseau privé** (10/8, 172.16/12, 192.168/16). La vérification est faite dans `startMcpServer` lui-même : aucun appelant ne peut obtenir `0.0.0.0` depuis un café ou un partage public, même en le demandant explicitement.
 

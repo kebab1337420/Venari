@@ -120,6 +120,16 @@ function runNetsh(args: string[]): Promise<{ code: number; stdout: string; stder
   })
 }
 
+/**
+ * netsh ne detaille les champs d'une regle que si elle existe ; le nom y est
+ * recopie tel quel, quelle que soit la langue de l'interface (l'etiquette est
+ * localisee, pas la valeur). Une recherche sur l'ancien nom « bountydesk »
+ * ne renvoyait donc jamais 'ok' depuis le renommage en Venari.
+ */
+export function netshRuleFound(r: { code: number; stdout: string }): boolean {
+  return r.code === 0 && r.stdout.toLowerCase().includes(FIREWALL_RULE.toLowerCase())
+}
+
 function runCli(
   cmd: string,
   args: string[]
@@ -160,7 +170,7 @@ async function firewallState(): Promise<McpDiagnoseInfo['firewall']> {
   }
   try {
     const r = await runNetsh(['show', 'rule', `name=${FIREWALL_RULE}`])
-    if (r.code === 0 && r.stdout.toLowerCase().includes('bountydesk')) return 'ok'
+    if (netshRuleFound(r)) return 'ok'
     return 'missing'
   } catch {
     return 'unmanaged'

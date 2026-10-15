@@ -672,6 +672,7 @@ export function ProgramsScreen() {
               >
                 <option value="csv">CSV</option>
                 <option value="json">JSON</option>
+                <option value="md">Markdown</option>
               </select>
               <button
                 className="btn"

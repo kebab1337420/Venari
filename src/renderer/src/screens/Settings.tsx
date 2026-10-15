@@ -720,10 +720,11 @@ export function SettingsScreen({ onLogout }: Props) {
                 </details>
 
                 <p className="muted-text">
-                  Outils disponibles (16) : <code>list_programs</code> (paginé),{' '}
+                  Outils disponibles (18) : <code>list_programs</code> (paginé),{' '}
                   <code>get_program_detail</code>, <code>list_credentials</code> (sans secret),{' '}
                   <code>set_note</code>, <code>list_notes</code>, <code>list_tools</code>,{' '}
                   <code>install_tool</code>, <code>open_browser</code>, <code>fetch_page</code>,{' '}
+                  <code>http_request</code>, <code>submit_report</code>,{' '}
                   <code>list_scans</code>, <code>start_scan</code>, <code>get_scan</code>,{' '}
                   <code>scan_events</code>, <code>dedupe_findings</code>, <code>cvss_score</code>,{' '}
                   <code>run_tool</code>.

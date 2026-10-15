@@ -14,6 +14,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "boite": "node boite/src/cli.ts",
+    "mcp:pair": "node scripts/pair.cjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",

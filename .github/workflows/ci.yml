@@ -57,7 +57,7 @@ jobs:
       - name: Binaire Electron
         run: node node_modules/electron/install.js
 
-      - name: Tests + typecheck + build
+      - name: Lint + tests + typecheck + build
         run: npm run pack:check
 
       - uses: actions/upload-artifact@v4

@@ -55,8 +55,9 @@ node node_modules/electron/install.js
 | `npm start` | preview du build courant |
 | `npm run test` | tests unitaires (Vitest) |
 | `npm run typecheck` | typecheck TypeScript (main + renderer) |
+| `npm run lint` | analyse statique (oxlint, règles `correctness`, aucun avertissement accepté) |
 | `npm run build` | build `out/` (main, preload, renderer) |
-| `npm run pack:check` | tests + typecheck + build, **sans** empaquetage — la porte à utiliser en CI et sur les deux plateformes |
+| `npm run pack:check` | lint + tests + typecheck + build, **sans** empaquetage — la porte à utiliser en CI et sur les deux plateformes |
 | `npm run dist:win` | `pack:check` + installeur NSIS → `dist/Venari-Setup-<version>.exe` |
 | `npm run dist:linux` | `pack:check` + AppImage et deb → `dist/` |
 | `npm run dist:all` | les deux plateformes (à lancer sur chaque OS : un AppImage ne se cross-build pas de façon fiable) |

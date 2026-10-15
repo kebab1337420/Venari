@@ -96,9 +96,18 @@ describe('serializeExport', () => {
     expect(parsed[0]!.tags).toEqual(['api', 'nofollow'])
   })
 
+  it('produit du Markdown avec en-tête, separateur et cellules echappees', () => {
+    const md = serializeExport([program({ name: 'Acme|Corp', note: 'l1\nl2' })], 'md')
+    expect(md).toContain('| id | handle | name')
+    expect(md).toContain('| --- |')
+    expect(md).toContain('Acme\\|Corp')
+    expect(md).toContain('l1 l2')
+  })
+
   it('choisit le bon format', () => {
     expect(serializeExport([], 'csv')).toContain(EXPORT_COLUMNS.join(','))
     expect(serializeExport([], 'json')).toBe('[]\n')
+    expect(serializeExport([], 'md')).toContain('| id |')
   })
 })
 
@@ -106,6 +115,7 @@ describe('exportFileName / exportQuery', () => {
   it('nomme le fichier avec la date du jour et le format', () => {
     expect(exportFileName('csv', Date.UTC(2026, 5, 17))).toBe('venari-programmes-2026-06-17.csv')
     expect(exportFileName('json', Date.UTC(2026, 5, 17))).toBe('venari-programmes-2026-06-17.json')
+    expect(exportFileName('md', Date.UTC(2026, 5, 17))).toBe('venari-programmes-2026-06-17.md')
   })
 
   it('exporte tout ce qui est filtré, sans pagination', () => {

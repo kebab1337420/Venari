@@ -122,7 +122,7 @@ Le port MCP n'est volontairement pas vérifié par les jobs de smoke test : le s
 
 ### Programmes et sync
 - Écran **Programmes** : liste paginée (recherche avec debounce, filtre favoris, tri nom/prime/récent, sens croissant/décroissant). La page affiche `x / y programmes` et le bouton **Charger la suite** déroule au-delà des 200 premiers — le catalogue n'est plus tronqué en silence.
-- **Exporter** : sélecteur CSV / JSON, avec les **filtres courants** (favori, groupe, tag, recherche), la pagination ignorée. Le fichier est écrit à l'emplacement choisi au système. CSV en UTF-8 avec BOM (Excel l'ouvre sans réglage), cellules échappées à la norme RFC 4180 et préfixées quand elles commenceraient par `=`, `+`, `-` ou `@` (injection de formule).
+- **Exporter** : sélecteur CSV / JSON / Markdown, avec les **filtres courants** (favori, groupe, tag, recherche), la pagination ignorée. Le fichier est écrit à l'emplacement choisi au système. CSV en UTF-8 avec BOM (Excel l'ouvre sans réglage), cellules échappées à la norme RFC 4180 et préfixées quand elles commenceraient par `=`, `+`, `-` ou `@` (injection de formule). Markdown produit un tableau prêt à coller dans un rapport (barres verticales et retours à la ligne échappés).
 - **Synchroniser** importe le catalogue (paginated, limite ~400 requêtes / 5 min gérée par un token bucket, retry en backoff sur 429/5xx).
 - Favoris, groupes, tags et notes : **stockés localement en SQLite**, indépendants de l'API (lecture seule). Base : `%APPDATA%\Venari\bountydesk.db` sous Windows, `~/.config/Venari/bountydesk.db` sous Linux (chemins XDG standard, résolus par `app.getPath('userData')`).
 

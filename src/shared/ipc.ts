@@ -106,7 +106,7 @@ export interface ProgramsPage {
   total: number
 }
 
-export type ExportFormat = 'csv' | 'json'
+export type ExportFormat = 'csv' | 'json' | 'md'
 
 /**
  * L'export se fait via un sélecteur de fichier du système : le renderer ne

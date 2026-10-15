@@ -18,6 +18,7 @@ import {
   findFile,
   pathExecutableNames,
   selectWindowsAsset,
+  unsafeArchiveEntry,
   withSystemInstallLock,
 } from '../src/main/services/tools/installer'
 
@@ -163,6 +164,26 @@ describe('assertStaysInside (archive qui sortirait du dossier)', () => {
 
   it('refuse un ../ noyé dans un chemin', async () => {
     await expect(assertStaysInside(writeTar(['bin/../../escaped.txt']))).rejects.toThrow(/hors dossier/)
+  })
+})
+
+describe('unsafeArchiveEntry (validation pure d’une entrée)', () => {
+  it('laisse passer un chemin relatif ordinaire', () => {
+    expect(unsafeArchiveEntry('tool.exe')).toBeNull()
+    expect(unsafeArchiveEntry('bin/tool.exe')).toBeNull()
+  })
+
+  it('refuse les chemins absolus Unix, UNC et Windows', () => {
+    expect(unsafeArchiveEntry('/etc/passwd')).toMatch(/absolu/)
+    expect(unsafeArchiveEntry('//srv/share/evil')).toMatch(/absolu/)
+    expect(unsafeArchiveEntry('C:\\Windows\\evil.dll')).toMatch(/absolu/)
+    expect(unsafeArchiveEntry('C:/Windows/evil.dll')).toMatch(/absolu/)
+  })
+
+  it('refuse toute remontée de répertoire', () => {
+    expect(unsafeArchiveEntry('../escaped.txt')).toMatch(/hors dossier/)
+    expect(unsafeArchiveEntry('bin/../escaped.txt')).toMatch(/hors dossier/)
+    expect(unsafeArchiveEntry('bin\\..\\escaped.txt')).toMatch(/hors dossier/)
   })
 })
 

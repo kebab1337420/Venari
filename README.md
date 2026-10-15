@@ -194,7 +194,10 @@ Le mécanisme réellement utilisé est visible dans l'app. Le repli AES-GCM prot
 - Renderer isolé : `contextIsolation`, pas de `nodeIntegration`, `sandbox`, CSP stricte au build.
 - Toute entrée IPC est validée (zod) ; les schémas API sont dérivés de la spec OpenAPI officielle fournie dans `openapi/researcher.swagger.json`.
 - L'API Intigriti est utilisée en **lecture seule** ; les favoris/groups/tags/notes/credentials sont strictement locaux.
-- Serveur MCP : JSON-RPC sur `POST`, authentification par jeton Bearer, **aucun header CORS** (un navigateur cross-origin ne peut pas consommer le serveur), liste blanche d'outils par défaut (les shells sont refusés).
+- Serveur MCP : JSON-RPC sur `POST`, authentification par jeton Bearer, **aucun header CORS** (un navigateur cross-origin ne peut pas consommer le serveur), liste blanche d'outils par défaut (coquilles, interpréteurs et téléchargeurs refusés, y compris via le catalogue).
+- **Transport LAN en clair (HTTP/WS sans TLS)** : le jeton circule donc en clair sur le réseau local. Il n'est **jamais** placé dans l'URL (en-tête `Authorization: Bearer` uniquement, y compris pour l'agent) afin d'éviter sa fuite par journaux, proxys et historique, mais un observateur passif du LAN peut l'intercepter. À n'exposer que sur un réseau privé de confiance ; les jetons sont révocables en 1 clic en cas de doute.
+- **Filtre SSRF** : `fetch_page` et `http_request` refusent les cibles locales et privées (loopback, RFC1918, link-local, `*.internal`) après résolution DNS, à chaque saut de redirection ; `http_request` respecte les ROE du programme (outils automatisés interdits) en plus du scope.
+- `run_tool` refuse les coquilles, interpréteurs et binaires-téléchargeurs, même présents au catalogue : aucune évasion shell ni exécution de code arbitraire via une ligne de commande.
 
 ## Structure
 

@@ -14,7 +14,7 @@ import { closeDb, getRepository } from './db'
 import { purgeInstallResidues } from './services/tools/installer'
 import { setMainWindow } from './window'
 
-const APP_ID = 'com.bountydesk.app'
+const APP_ID = 'com.venari.app'
 
 // Avant le renommage BountyDesk -> Venari, les donnees (config.json,
 // bountydesk.db, tools/) vivaient dans %APPDATA%\BountyDesk. Le productName

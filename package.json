@@ -48,5 +48,9 @@
   "allowScripts": {
     "esbuild@0.25.12": true,
     "esbuild@0.28.2": true
+  },
+  "overrides": {
+    "http-cache-semantics": "^4.2.1",
+    "source-map-js": "^1.2.2"
   }
 }

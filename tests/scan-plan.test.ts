@@ -63,6 +63,14 @@ describe('selectTargets', () => {
     ])
   })
 
+  it('ecarte les cibles wildcard (non scannables telles quelles)', () => {
+    const scope: ScopeDomain[] = [
+      d({ endpoint: '*.example.com' }),
+      d({ endpoint: 'https://app.example.com' }),
+    ]
+    expect(selectTargets(scope)).toEqual(['https://app.example.com'])
+  })
+
   it('applique le user-agent et le header de requête des ROE au plan', () => {
     const plan = buildPlan('med', ['https://a.example.com'], 5, {
       userAgent: 'BotDE/1.0',

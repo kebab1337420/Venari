@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { app } from 'electron'
-import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import pkg from '../../../../package.json'
+import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, delimiter, join } from 'node:path'
 import type { ToolEntry } from '../../../shared/ipc'
 import { getTool, TOOL_CATALOG, type ToolDefinition, type ToolInstallationResult } from './catalog'
@@ -191,6 +192,38 @@ function killOnTimeout(child: ReturnType<typeof spawn>, ms: number): () => boole
   }
 }
 
+/**
+ * Resout un nom de binaire nu en chemin absolu via PATH. Indispensable avant
+ * spawn : sous Windows, CreateProcess cherche d'abord dans le repertoire
+ * courant — et le dossier tools est inscriptible par `run_tool`. Un faux
+ * git.exe/tar.exe/git y detournerait l'installation. Un chemin deja absolu ou
+ * contenant un separateur (binaire du catalogue resolu) est laisse tel quel.
+ */
+function resolveSystemBin(name: string): string | null {
+  const raw = process.env.PATH ?? process.env.Path ?? ''
+  const exts = isWindows()
+    ? (process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';').map((e) => e.trim()).filter(Boolean)
+    : ['']
+  for (const entry of raw.split(delimiter)) {
+    const dir = entry.replace(/^"|"$/g, '')
+    if (!dir || !isAbsolutePath(dir)) continue
+    for (const ext of exts) {
+      const candidate = join(dir, name + ext)
+      try {
+        if (statSync(candidate).isFile()) return candidate
+      } catch {
+        // absent de ce dossier : on continue
+      }
+    }
+  }
+  return null
+}
+
+function resolveCmd(cmd: string): string {
+  if (/[\\/]/.test(cmd)) return cmd
+  return resolveSystemBin(cmd) ?? cmd
+}
+
 function run(
   cmd: string,
   args: string[],
@@ -199,7 +232,7 @@ function run(
   env?: Record<string, string>
 ): Promise<number> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, {
+    const child = spawn(resolveCmd(cmd), args, {
       windowsHide: true,
       shell: false,
       // POSIX : enfant meneur de son groupe, pour que killTree vise toute la
@@ -222,7 +255,7 @@ function run(
 /** Variante qui capture stdout : sert a resoudre un chemin sans executer la cible. */
 function runCapture({ cmd, args }: Spawn, timeoutMs = DETECT_TIMEOUT_MS): Promise<{ code: number; stdout: string }> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, {
+    const child = spawn(resolveCmd(cmd), args, {
       windowsHide: true,
       shell: false,
       detached: process.platform !== 'win32',
@@ -397,8 +430,9 @@ export async function currentTools(): Promise<ToolEntry[]> {
 
 function githubHeaders(): Record<string, string> {
   const token = process.env.GITHUB_TOKEN ?? loadGithubToken()
-  if (!token) return { 'User-Agent': 'Venari/0.1' }
-  return { 'User-Agent': 'Venari/0.1', Authorization: `Bearer ${token}` }
+  const userAgent = `Venari/${pkg.version}`
+  if (!token) return { 'User-Agent': userAgent }
+  return { 'User-Agent': userAgent, Authorization: `Bearer ${token}` }
 }
 
 /**
@@ -492,13 +526,29 @@ async function listArchiveEntries(archive: string): Promise<string[] | null> {
   return null
 }
 
+/** Motif de refus d'une entree d'archive, ou null si elle reste dans la destination. */
+export function unsafeArchiveEntry(entry: string): string | null {
+  const normalized = entry.replace(/\\/g, '/')
+  if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized) || normalized.startsWith('//')) {
+    return `chemin absolu hors dossier de destination (${entry})`
+  }
+  if (normalized.split('/').includes('..')) {
+    return `entree hors dossier de destination (${entry})`
+  }
+  return null
+}
+
 /** Refuse une archive dont une entree s'echapperait du dossier de destination. */
 export async function assertStaysInside(archive: string): Promise<void> {
   const entries = await listArchiveEntries(archive)
-  if (!entries) return
-  const escape = entries.find((entry) => entry.split(/[\\/]/).includes('..'))
-  if (escape) {
-    throw new Error(`Archive refusee : entree hors dossier de destination (${escape})`)
+  // Echec ferme : si on ne peut pas lister l'archive, on ne peut pas garantir
+  // l'absence de traversee, donc on refuse plutot que d'installer a l'aveugle.
+  if (!entries) {
+    throw new Error('Archive refusee : contenu illisible, verification anti-traversee impossible')
+  }
+  for (const entry of entries) {
+    const reason = unsafeArchiveEntry(entry)
+    if (reason) throw new Error(`Archive refusee : ${reason}`)
   }
 }
 

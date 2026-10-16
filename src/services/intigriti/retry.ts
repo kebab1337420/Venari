@@ -30,7 +30,9 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions =
       }
       let delayMs: number
       if (error instanceof RateLimitError && error.retryAfterMs !== null) {
-        delayMs = error.retryAfterMs
+        // Plancher d'une seconde : un `Retry-After: 0` ne doit pas provoquer une
+        // boucle de requetes immediates.
+        delayMs = Math.max(1000, error.retryAfterMs)
       } else {
         const backoff = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt)
         const jitter = rand() * 0.3 * backoff

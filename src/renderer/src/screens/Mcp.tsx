@@ -59,7 +59,7 @@ export function McpScreen() {
                 : 'Serveur MCP configuré mais à l’arrêt — voyez Réglages.'}
         </p>
         <p className="muted">
-          Il expose les 16 outils Venari (programmes, scans, notes, outils) à une IA locale. Port, jetons,
+          Il expose les 18 outils Venari (programmes, scans, notes, outils) à une IA locale. Port, jetons,
           adresses LAN et journal des appels se gèrent dans Réglages.
         </p>
       </div>

@@ -160,21 +160,22 @@ export function App() {
               key={item.id}
               className={`nav-item ${section === item.id ? 'active' : ''}`}
               aria-current={section === item.id ? 'page' : undefined}
+              title={item.label}
               onClick={() => goto(item.id)}
             >
               <span className="nav-icon">{item.icon}</span>
-              {item.label}
+              <span className="nav-label">{item.label}</span>
             </button>
           ))}
         </nav>
         <div className="app-sidebar-foot">
           <button className="nav-item" onClick={() => goto('settings')} title="Sécurité & réglages">
             <span className="nav-icon">{icon.shield}</span>
-            Sécurité
+            <span className="nav-label">Sécurité</span>
           </button>
-          <button className="nav-item" onClick={logout}>
+          <button className="nav-item" onClick={logout} title="Se déconnecter">
             <span className="nav-icon">{icon.logout}</span>
-            Se déconnecter
+            <span className="nav-label">Se déconnecter</span>
           </button>
         </div>
       </aside>

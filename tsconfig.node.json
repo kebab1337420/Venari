@@ -27,5 +27,6 @@
     "src/services/**/*",
     "boite/src/**/*",
     "tests/**/*"
-  ]
+  ],
+  "exclude": ["tests/**/*.tsx"]
 }

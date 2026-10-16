@@ -2,6 +2,16 @@ import type { Domain, IntigritiClient, RulesVersion } from '../../services/intig
 import { getRepository } from '../db'
 import type { ProgramDetailData, RoeInfo, ScopeDomain } from '../../shared/ipc'
 
+/**
+ * Un domaine est hors scope quand son tier est la sentinelle "Out of scope" de
+ * l'API Intigriti (enumeration tier id 5). Le champ `type` decrit la nature de
+ * l'actif (URL, Wildcard, IP range...), pas son appartenance au scope : s'en
+ * servir pour detecter le scope marquait tous les domaines hors scope et vidait
+ * la liste des cibles de scan.
+ * @see https://intigriti.readme.io/reference/programs (Program domain tier)
+ */
+const OUT_OF_SCOPE_TIER = /out[- ]?of[- ]?scope/i
+
 function toScopeDomain(d: Domain): ScopeDomain {
   const type = d.type.value
   return {
@@ -10,7 +20,7 @@ function toScopeDomain(d: Domain): ScopeDomain {
     endpoint: d.endpoint,
     tier: d.tier.value,
     description: d.description,
-    inScope: /in[- ]?scope/i.test(type),
+    inScope: !OUT_OF_SCOPE_TIER.test(d.tier.value),
   }
 }
 

@@ -28,10 +28,6 @@ export interface ToolDefinition {
    * l'interpréteur système.
    */
   pipPackage?: string
-  /** Entrée point du module quand elle diffère du nom de la distribution. */
-  pythonModule?: string
-  /** Le gestionnaire de paquets de la plateforme est requis (apt, winget...). */
-  needsPackageManager?: boolean
   /** Outil sans équivalent hors Windows (Sysinternals, PowerToys...). */
   windowsOnly?: boolean
   /** Application graphique : installation hors périmètre d'un utilitaire CLI. */

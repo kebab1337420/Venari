@@ -18,7 +18,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../src/main/services/tools/installer', () => ({
   currentTools: async () => [],
-  installTool: async (id: string) => ({ ok: true as const, installed: true }),
+  installTool: async (_id: string) => ({ ok: true as const, installed: true }),
 }))
 
 import { closeDb, getRepository } from '../src/main/db'

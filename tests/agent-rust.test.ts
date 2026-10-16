@@ -20,7 +20,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../src/main/services/tools/installer', () => ({
   currentTools: async () => [],
-  installTool: async (id: string) => ({ ok: true as const, installed: true }),
+  installTool: async (_id: string) => ({ ok: true as const, installed: true }),
   resolveBinary: () => null,
   resolveWordlist: () => null,
   toolsDir: () => userData,
@@ -38,7 +38,6 @@ const TOKEN = 'test-token-http-1234567890'
 const AGENT_TOKEN = 'agent-token-rust-123456789'
 const AGENT_ID = 'agent-rust'
 let port = 0
-let exePath: string
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))

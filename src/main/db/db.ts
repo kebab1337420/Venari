@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { migrations } from './migrations'
+import { migrations, type Migration } from './migrations'
 
 export type Db = DatabaseSync
 
@@ -16,12 +16,14 @@ export function openDatabase(path: string): Db {
   return db
 }
 
-export function migrate(db: Db): void {
+// La liste est injectable pour pouvoir tester le runner (montée par etapes,
+// annulation en cas d'echec) sans dependre de la liste reelle du produit.
+export function migrate(db: Db, list: Migration[] = migrations): void {
   const row = db.prepare('SELECT user_version FROM pragma_user_version').get() as
     | { user_version: number }
     | undefined
   const current = row?.user_version ?? 0
-  for (const m of migrations) {
+  for (const m of list) {
     if (m.version <= current) continue
     begin(db)
     try {

@@ -22,6 +22,8 @@ import type {
   McpDiagnoseResult,
   McpFirewallFixResult,
   McpMachinesResult,
+  McpPairingCancelResult,
+  McpPairingCreateResult,
   McpRegenerateResult,
   McpRequestsResult,
   McpSetEnabledResult,
@@ -102,7 +104,9 @@ export const Api = {
     requests: (limit?: number): Promise<McpRequestsResult> => window.bountydesk.mcp.requests(limit),
     diagnose: (): Promise<McpDiagnoseResult> => window.bountydesk.mcp.diagnose(),
     firewallFix: (): Promise<McpFirewallFixResult> => window.bountydesk.mcp.firewallFix(),
-    machines: (limit?: number): Promise<McpMachinesResult> => window.bountydesk.mcp.machines(limit)
+    machines: (limit?: number): Promise<McpMachinesResult> => window.bountydesk.mcp.machines(limit),
+    pairingCreate: (): Promise<McpPairingCreateResult> => window.bountydesk.mcp.pairingCreate(),
+    pairingCancel: (): Promise<McpPairingCancelResult> => window.bountydesk.mcp.pairingCancel()
   },
   agent: {
     tokens: (): Promise<AgentTokensResult> => window.bountydesk.agent.tokens(),

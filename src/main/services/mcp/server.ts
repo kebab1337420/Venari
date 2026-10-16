@@ -247,7 +247,7 @@ function computeCvssBase(raw: string): CvssComputation {
 
 const PAGE_TIMEOUT_MS = 15_000
 const PAGE_MAX_REDIRECTS = 5
-const PAGE_USER_AGENT = 'Venari/0.1 (lecteur de page pour agent IA, GET seul)'
+const PAGE_USER_AGENT = `Venari/${pkg.version} (lecteur de page pour agent IA, GET seul)`
 
 const HTML_ENTITIES: Record<string, string> = {
   nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'", '#x27': "'",

@@ -168,6 +168,8 @@ interface ProgramRow {
 
 export class Repository {
   private readonly upsertProgramStmt: ReturnType<Db['prepare']>
+  /** Horodatage de la derniere purge du journal MCP (purge amortie, cf. appendMcpRequest). */
+  private lastMcpPruneAt = 0
 
   constructor(private readonly db: Db) {
     this.upsertProgramStmt = db.prepare(`
@@ -656,7 +658,13 @@ export class Repository {
     this.db
       .prepare('INSERT INTO mcp_requests (ts, token_label, tool, args_json, status, ms, remote_ip) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(input.ts, input.tokenLabel, input.tool, input.argsJson, input.status, input.ms, input.remoteIp || '')
-    this.pruneMcpRequests(input.ts)
+    // La purge coute un DELETE avec sous-requete (scan du journal) : on l'amortit
+    // a une fois par minute au lieu de l'executer a chaque appel d'outil, sinon
+    // une session active devient quadratique en nombre de requetes.
+    if (input.ts - this.lastMcpPruneAt >= 60_000) {
+      this.lastMcpPruneAt = input.ts
+      this.pruneMcpRequests(input.ts)
+    }
   }
 
   /**

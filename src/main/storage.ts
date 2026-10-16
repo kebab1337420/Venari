@@ -239,7 +239,7 @@ export function loadMcpConfig(): McpConfig {
   }
   return {
     enabled: mcp.enabled === true,
-    port: typeof mcp.port === 'number' ? mcp.port : null,
+    port: typeof mcp.port === 'number' && Number.isInteger(mcp.port) && mcp.port >= 1024 && mcp.port <= 65535 ? mcp.port : null,
     lan: mcp.lan === true,
     tokens: storedTokens(mcp.tokens, mcp.tokenEncrypted),
     agents: storedTokens(mcp.agents, undefined),

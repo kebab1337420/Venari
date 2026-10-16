@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -68,6 +67,58 @@ function ipcHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
 const TOKEN = 'test-token-http-1234567890'
 let port = 0
 
+// Les serveurs de test etaient lies sur le port 0 (choisi par l'OS). Sur les
+// runners CI, le port ephemere tombait parfois sur un port que fetch refuse
+// (« bad port » : liste fixe de la spec WhatWG, qui monte jusqu'a 10080), ce
+// qui faisait echouer rpc()/fetch_page de facon intermittente. On lie donc les
+// serveurs de test dans une plage haute, hors de cette liste, avec reessai en
+// cas de collision.
+const TEST_PORT_MIN = 20000
+const TEST_PORT_MAX = 32000
+
+function randomSafePort(): number {
+  return TEST_PORT_MIN + Math.floor(Math.random() * (TEST_PORT_MAX - TEST_PORT_MIN))
+}
+
+function listenSafe(server: Server): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    let attempt = 0
+    const tryListen = (): void => {
+      if (attempt++ >= 25) {
+        reject(new Error('aucun port de test disponible'))
+        return
+      }
+      const onError = (): void => {
+        server.removeListener('error', onError)
+        tryListen()
+      }
+      server.once('error', onError)
+      server.listen(randomSafePort(), '127.0.0.1', () => {
+        server.removeListener('error', onError)
+        const addr = server.address()
+        resolve(typeof addr === 'object' && addr !== null ? addr.port : 0)
+      })
+    }
+    tryListen()
+  })
+}
+
+async function startTestServer(
+  token: string = TOKEN,
+  opts?: Parameters<typeof startMcpServer>[2]
+): Promise<void> {
+  let lastError = 'aucun port de test disponible'
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const r = await startMcpServer(randomSafePort(), token, opts)
+    if (r.ok) {
+      port = r.port
+      return
+    }
+    lastError = r.error
+  }
+  throw new Error(`demarrage du serveur de test impossible : ${lastError}`)
+}
+
 async function rpc(
   body: unknown,
   headers: Record<string, string> = {},
@@ -118,9 +169,7 @@ describe('serveur MCP (HTTP réel)', () => {
         webLink: null, following: false, rawJson: null,
       } as ProgramInput,
     ])
-    const r = await startMcpServer(0, TOKEN)
-    if (!r.ok) throw new Error(r.error)
-    port = r.port
+    await startTestServer()
   })
 
   afterEach(() => {
@@ -277,15 +326,13 @@ describe('serveur MCP (HTTP réel)', () => {
 
   it('accepte plusieurs jetons nommés et révoque un jeton immédiatement', async () => {
     const second = 'token-second-pc-abcdef'
-    const r = await startMcpServer(0, TOKEN, {
+    await startTestServer(TOKEN, {
       tokens: [TOKEN, second],
       tokenLabels: new Map([
         [TOKEN, 'PC-bureau'],
         [second, 'Labo'],
       ]),
     })
-    if (!r.ok) throw new Error(r.error)
-    port = r.port
 
     const ok = await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, {}, second)
     expect(ok.status).toBe(200)
@@ -296,17 +343,13 @@ describe('serveur MCP (HTTP réel)', () => {
     }, {}, second)
     expect(call.status).toBe(200)
 
-    const restart = await startMcpServer(0, TOKEN)
-    if (!restart.ok) throw new Error(restart.error)
-    port = restart.port
+    await startTestServer()
     const revoked = await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, {}, second)
     expect(revoked.status).toBe(401)
   })
 
   it('fonctionne en mode LAN (bind 0.0.0.0) et reste joignable', async () => {
-    const r = await startMcpServer(0, TOKEN, { lan: true })
-    if (!r.ok) throw new Error(r.error)
-    port = r.port
+    await startTestServer(TOKEN, { lan: true })
     const res = await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' })
     expect(res.status).toBe(200)
   })
@@ -368,8 +411,7 @@ describe('outils MCP ajoutés (notes, page, scans, dedupe, CVSS)', () => {
       res.writeHead(404, { 'content-type': 'text/plain' })
       res.end('introuvable')
     })
-    await new Promise<void>((done) => pageServer.listen(0, '127.0.0.1', () => done()))
-    pagePort = (pageServer.address() as AddressInfo).port
+    pagePort = await listenSafe(pageServer)
   })
 
   afterAll(() => {
@@ -390,9 +432,7 @@ describe('outils MCP ajoutés (notes, page, scans, dedupe, CVSS)', () => {
         webLink: null, following: false, rawJson: null,
       } as ProgramInput,
     ])
-    const r = await startMcpServer(0, TOKEN)
-    if (!r.ok) throw new Error(r.error)
-    port = r.port
+    await startTestServer()
   })
 
   afterEach(() => {
@@ -743,9 +783,7 @@ describe('handlers IPC Santé & machines', () => {
         webLink: null, following: false, rawJson: null,
       } as ProgramInput,
     ])
-    const r = await startMcpServer(0, TOKEN)
-    if (!r.ok) throw new Error(r.error)
-    port = r.port
+    await startTestServer()
   })
 
   afterEach(() => {

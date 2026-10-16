@@ -78,11 +78,11 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.FavoriteSet, (_event, raw) => {
-    const { programId, favorite } = z
-      .object({ programId: programIdSchema, favorite: z.boolean() })
-      .parse(raw)
     const repo = getRepository()
     try {
+      const { programId, favorite } = z
+        .object({ programId: programIdSchema, favorite: z.boolean() })
+        .parse(raw)
       repo.setFavorite(programId, favorite)
       return { ok: true } as const
     } catch (err) {
@@ -91,11 +91,11 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.NoteSet, (_event, raw) => {
-    const { programId, note } = z
-      .object({ programId: programIdSchema, note: z.string().max(20_000) })
-      .parse(raw)
     const repo = getRepository()
     try {
+      const { programId, note } = z
+        .object({ programId: programIdSchema, note: z.string().max(20_000) })
+        .parse(raw)
       repo.setNote(programId, note)
       return { ok: true } as const
     } catch (err) {
@@ -106,9 +106,9 @@ export function registerProgramsIpc(): void {
   ipcMain.handle(IPC.GroupsList, () => getRepository().listGroups())
 
   ipcMain.handle(IPC.GroupsCreate, (_event, rawName) => {
-    const name = z.string().trim().min(1).max(100).parse(rawName)
     const repo = getRepository()
     try {
+      const name = z.string().trim().min(1).max(100).parse(rawName)
       return { ok: true, group: repo.createGroup(name) } as const
     } catch (err) {
       return dbResultError(err)
@@ -116,11 +116,11 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.GroupsRename, (_event, raw) => {
-    const { id, name } = z
-      .object({ id: z.number().int().positive(), name: z.string().trim().min(1).max(100) })
-      .parse(raw)
     const repo = getRepository()
     try {
+      const { id, name } = z
+        .object({ id: z.number().int().positive(), name: z.string().trim().min(1).max(100) })
+        .parse(raw)
       repo.renameGroup(id, name)
       return { ok: true } as const
     } catch (err) {
@@ -129,9 +129,9 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.GroupsRemove, (_event, rawId) => {
-    const id = z.number().int().positive().parse(rawId)
     const repo = getRepository()
     try {
+      const id = z.number().int().positive().parse(rawId)
       repo.removeGroup(id)
       return { ok: true } as const
     } catch (err) {
@@ -140,11 +140,11 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.GroupsAddMember, (_event, raw) => {
-    const { groupId, programId } = z
-      .object({ groupId: z.number().int().positive(), programId: programIdSchema })
-      .parse(raw)
     const repo = getRepository()
     try {
+      const { groupId, programId } = z
+        .object({ groupId: z.number().int().positive(), programId: programIdSchema })
+        .parse(raw)
       repo.addToGroup(groupId, programId)
       return { ok: true } as const
     } catch (err) {
@@ -153,11 +153,11 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.GroupsRemoveMember, (_event, raw) => {
-    const { groupId, programId } = z
-      .object({ groupId: z.number().int().positive(), programId: programIdSchema })
-      .parse(raw)
     const repo = getRepository()
     try {
+      const { groupId, programId } = z
+        .object({ groupId: z.number().int().positive(), programId: programIdSchema })
+        .parse(raw)
       repo.removeFromGroup(groupId, programId)
       return { ok: true } as const
     } catch (err) {
@@ -168,9 +168,9 @@ export function registerProgramsIpc(): void {
   ipcMain.handle(IPC.TagsList, () => getRepository().listTags())
 
   ipcMain.handle(IPC.TagsCreate, (_event, rawName) => {
-    const name = z.string().trim().min(1).max(50).parse(rawName)
     const repo = getRepository()
     try {
+      const name = z.string().trim().min(1).max(50).parse(rawName)
       return { ok: true, tag: repo.createTag(name) } as const
     } catch (err) {
       return dbResultError(err)
@@ -178,9 +178,9 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.TagsRemove, (_event, rawId) => {
-    const id = z.number().int().positive().parse(rawId)
     const repo = getRepository()
     try {
+      const id = z.number().int().positive().parse(rawId)
       repo.removeTag(id)
       return { ok: true } as const
     } catch (err) {
@@ -189,11 +189,11 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.TagsAddToProgram, (_event, raw) => {
-    const { programId, tagId } = z
-      .object({ programId: programIdSchema, tagId: z.number().int().positive() })
-      .parse(raw)
     const repo = getRepository()
     try {
+      const { programId, tagId } = z
+        .object({ programId: programIdSchema, tagId: z.number().int().positive() })
+        .parse(raw)
       repo.addTagToProgram(programId, tagId)
       return { ok: true } as const
     } catch (err) {
@@ -202,11 +202,11 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.TagsRemoveFromProgram, (_event, raw) => {
-    const { programId, tagId } = z
-      .object({ programId: programIdSchema, tagId: z.number().int().positive() })
-      .parse(raw)
     const repo = getRepository()
     try {
+      const { programId, tagId } = z
+        .object({ programId: programIdSchema, tagId: z.number().int().positive() })
+        .parse(raw)
       repo.removeTagFromProgram(programId, tagId)
       return { ok: true } as const
     } catch (err) {

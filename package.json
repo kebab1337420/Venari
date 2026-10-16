@@ -1,6 +1,6 @@
 {
   "name": "bountydesk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Venari - bureau du chercheur Intigriti",
   "main": "./out/main/index.js",
   "author": "whitehat <kebab1337420@users.noreply.github.com>",
@@ -14,12 +14,15 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "boite": "node boite/src/cli.ts",
+    "mcp:pair": "node scripts/pair.cjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "lint": "oxlint --deny-warnings",
+    "lint:fix": "oxlint --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pack:check": "npm run test && npm run typecheck && npm run build",
+    "pack:check": "npm run lint && npm run test && npm run typecheck && npm run build",
     "dist": "npm run pack:check && electron-builder --win nsis --publish never",
     "dist:win": "npm run pack:check && electron-builder --win nsis --publish never",
     "dist:linux": "npm run pack:check && electron-builder --linux AppImage deb --publish never",
@@ -30,6 +33,8 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -38,6 +43,8 @@
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "jsdom": "^30.1.3",
+    "oxlint": "^1.88.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "^7.0.2",
@@ -48,5 +55,9 @@
   "allowScripts": {
     "esbuild@0.25.12": true,
     "esbuild@0.28.2": true
+  },
+  "overrides": {
+    "http-cache-semantics": "^4.2.1",
+    "source-map-js": "^1.2.2"
   }
 }

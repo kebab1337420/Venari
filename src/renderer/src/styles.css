@@ -1331,6 +1331,17 @@ select {
   font-size: 12px;
 }
 
+.pairing-code {
+  background: var(--bg0);
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  color: var(--accent);
+}
+
 .mcp-table {
   width: 100%;
   border-collapse: collapse;
@@ -1373,6 +1384,78 @@ select {
   border: none;
   padding: 0;
   font-size: 12px;
+}
+
+/* ---------- Fenêtres étroites ---------- */
+
+/* La fenêtre principale ne descend pas sous 960px, mais entre 960 et 1200px
+   la barre latérale (216px) et le volet de filtres (250px) ne laissent que
+   ~490px au contenu. On compacte donc la navigation en icônes, puis on
+   empile le volet de filtres au-dessus de la liste. */
+
+@media (max-width: 1200px) {
+  .app-sidebar {
+    width: 72px;
+    align-items: center;
+    padding: 14px 8px;
+  }
+  .app-sidebar .app-brand {
+    justify-content: center;
+    padding: 4px 0 10px;
+  }
+  .app-sidebar .brand-name,
+  .app-sidebar .nav-label {
+    display: none;
+  }
+  .nav-item {
+    justify-content: center;
+    padding: 9px 0;
+  }
+  .nav-item.active::before {
+    left: -8px;
+  }
+  .filter-pane {
+    width: 200px;
+  }
+}
+
+@media (max-width: 1040px) {
+  .programs-layout {
+    flex-direction: column;
+  }
+  .filter-pane {
+    width: auto;
+    max-height: 40vh;
+    gap: 12px;
+  }
+  .toolbar input.search,
+  .search-wrap {
+    min-width: 0;
+  }
+  .search-wrap input.search {
+    min-width: 140px;
+  }
+  .toolbar-actions {
+    flex-wrap: wrap;
+  }
+  .tool-main {
+    min-width: 140px;
+  }
+  .tool-status {
+    min-width: 100px;
+  }
+  .depth-grid {
+    grid-template-columns: 1fr;
+  }
+  .modal,
+  .modal.wide {
+    width: 92vw;
+    min-width: 0;
+  }
+  .mcp-table {
+    display: block;
+    overflow-x: auto;
+  }
 }
 
 /* ---------- Confort & accessibilité ---------- */

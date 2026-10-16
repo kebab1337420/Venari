@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { delimiter, join } from 'node:path'
+import { join } from 'node:path'
 
 vi.mock('electron', () => ({
   app: { getPath: () => mkdtempSync(join(tmpdir(), 'bountydesk-app-')) },
@@ -18,6 +18,7 @@ import {
   findFile,
   pathExecutableNames,
   selectWindowsAsset,
+  unsafeArchiveEntry,
   withSystemInstallLock,
 } from '../src/main/services/tools/installer'
 
@@ -166,14 +167,43 @@ describe('assertStaysInside (archive qui sortirait du dossier)', () => {
   })
 })
 
+describe('unsafeArchiveEntry (validation pure d’une entrée)', () => {
+  it('laisse passer un chemin relatif ordinaire', () => {
+    expect(unsafeArchiveEntry('tool.exe')).toBeNull()
+    expect(unsafeArchiveEntry('bin/tool.exe')).toBeNull()
+  })
+
+  it('refuse les chemins absolus Unix, UNC et Windows', () => {
+    expect(unsafeArchiveEntry('/etc/passwd')).toMatch(/absolu/)
+    expect(unsafeArchiveEntry('//srv/share/evil')).toMatch(/absolu/)
+    expect(unsafeArchiveEntry('C:\\Windows\\evil.dll')).toMatch(/absolu/)
+    expect(unsafeArchiveEntry('C:/Windows/evil.dll')).toMatch(/absolu/)
+  })
+
+  it('refuse toute remontée de répertoire', () => {
+    expect(unsafeArchiveEntry('../escaped.txt')).toMatch(/hors dossier/)
+    expect(unsafeArchiveEntry('bin/../escaped.txt')).toMatch(/hors dossier/)
+    expect(unsafeArchiveEntry('bin\\..\\escaped.txt')).toMatch(/hors dossier/)
+  })
+})
+
 describe('index PATH (détection sans spawn de processus)', () => {
   const isWin = process.platform === 'win32'
 
-  it('trouve un exécutable déposé dans un dossier du PATH', () => {
+  // Le scan lit chaque dossier du PATH : sur la machine hote il peut inclure
+  // des repertoires volumineux ou un chemin reseau lent, ce qui faisait
+  // depasser le delai sous charge en CI. En isolant le PATH dans un dossier
+  // temporaire, le resultat ne depend plus que du contenu teste.
+  function fakePathDir(): string {
     const dir = mkdtempSync(join(tmpdir(), 'bountydesk-path-'))
     writeFileSync(join(dir, isWin ? 'bdfake-tool.exe' : 'bdfake-tool'), '')
+    return dir
+  }
+
+  it('trouve un exécutable déposé dans un dossier du PATH', () => {
+    const dir = fakePathDir()
     const saved = process.env.PATH
-    process.env.PATH = [dir, saved].join(delimiter)
+    process.env.PATH = dir
     try {
       expect(pathExecutableNames().has('bdfake-tool')).toBe(true)
       expect(pathExecutableNames().has('bdfake-absent-9f3')).toBe(false)
@@ -184,14 +214,17 @@ describe('index PATH (détection sans spawn de processus)', () => {
   })
 
   it('se re-indexe quand le PATH change', () => {
+    const dir = fakePathDir()
     const saved = process.env.PATH
-    process.env.PATH = ''
     try {
+      process.env.PATH = ''
       expect(pathExecutableNames().size).toBe(0)
+      process.env.PATH = dir
+      expect(pathExecutableNames().size).toBe(1)
     } finally {
       process.env.PATH = saved
+      rmSync(dir, { recursive: true, force: true })
     }
-    expect(pathExecutableNames().size).toBeGreaterThan(0)
   })
 })
 

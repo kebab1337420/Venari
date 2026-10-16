@@ -168,6 +168,8 @@ interface ProgramRow {
 
 export class Repository {
   private readonly upsertProgramStmt: ReturnType<Db['prepare']>
+  /** Horodatage de la derniere purge du journal MCP (purge amortie, cf. appendMcpRequest). */
+  private lastMcpPruneAt = 0
 
   constructor(private readonly db: Db) {
     this.upsertProgramStmt = db.prepare(`
@@ -333,7 +335,12 @@ export class Repository {
     const dir = q.dir === 'desc' ? 'DESC' : 'ASC'
     switch (sort) {
       case 'bounty':
-        return `ORDER BY CASE WHEN p.max_bounty_value IS NULL THEN 1 ELSE 0 END, p.max_bounty_value ${dir}, p.name COLLATE NOCASE ASC`
+        // Même raison que « recent » : sans dernier critère, deux programmes
+        // portant la même prime ET le même nom (courant avec des primes
+        // absentes, toutes groupées) ne sont pas dans un ordre total, et la
+        // pagination OFFSET saute ou répète des lignes. Les primes absentes
+        // restent en fin de liste dans les deux sens.
+        return `ORDER BY CASE WHEN p.max_bounty_value IS NULL THEN 1 ELSE 0 END, p.max_bounty_value ${dir}, p.name COLLATE NOCASE ASC, p.id ASC`
       case 'recent':
         // L'ordre doit être total : sans second critère, deux programmes mis à
         // jour à la même milliseconde (une synchro en écrit des centaines en une
@@ -656,7 +663,13 @@ export class Repository {
     this.db
       .prepare('INSERT INTO mcp_requests (ts, token_label, tool, args_json, status, ms, remote_ip) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(input.ts, input.tokenLabel, input.tool, input.argsJson, input.status, input.ms, input.remoteIp || '')
-    this.pruneMcpRequests(input.ts)
+    // La purge coute un DELETE avec sous-requete (scan du journal) : on l'amortit
+    // a une fois par minute au lieu de l'executer a chaque appel d'outil, sinon
+    // une session active devient quadratique en nombre de requetes.
+    if (input.ts - this.lastMcpPruneAt >= 60_000) {
+      this.lastMcpPruneAt = input.ts
+      this.pruneMcpRequests(input.ts)
+    }
   }
 
   /**

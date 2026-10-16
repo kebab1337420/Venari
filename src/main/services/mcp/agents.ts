@@ -86,11 +86,6 @@ function toSessionInfo(row: RemoteSessionRow): RemoteSessionInfo {
   }
 }
 
-function infoOrNull(id: number): RemoteSessionInfo | null {
-  const row = rowFor(id)
-  return row ? toSessionInfo(row) : null
-}
-
 function sendJSON(ws: WebSocket, obj: unknown): void {
   const data = JSON.stringify(obj)
   if (ws.readyState === WebSocket.OPEN) {
@@ -271,9 +266,9 @@ function attachViewer(ws: WebSocket, link: { sessionId: number; agentToken: stri
   })
 }
 
-// Le jeton voyage en en-tête `Authorization: Bearer` : jamais dans l'URL,
-// donc jamais dans un journal, un proxy ou l'historique. L'ancien format
-// `?token=` reste accepte pour les binaires deja deployes.
+// Le jeton voyage uniquement en en-tete `Authorization: Bearer` : jamais dans
+// l'URL, donc jamais dans un journal, un proxy ou l'historique. L'ancien repli
+// `?token=` a ete retire (il fuyait le jeton dans les URL et logs).
 function bearerToken(header: unknown): string | null {
   if (typeof header !== 'string') return null
   const prefix = 'Bearer '
@@ -282,12 +277,22 @@ function bearerToken(header: unknown): string | null {
   return value.length > 0 ? value : null
 }
 
+/** Comparaison a duree constante pour ne pas fuiter le jeton par le timing. */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
 function upgrade(req: IncomingMessage, socket: import('node:stream').Duplex, head: Buffer): void {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1')
-  const token = bearerToken(req.headers.authorization) ?? url.searchParams.get('token') ?? ''
+  const headerToken = bearerToken(req.headers.authorization) ?? ''
   if (url.pathname === '/agent') {
-    const auth = agentAuth.find((a) => a.token === token)
-    if (!auth) {
+    // Jeton d'agent : en-tete uniquement, jamais dans l'URL (fuite via journaux,
+    // proxys, historique). Aucun repli `?token=`, meme valide.
+    const auth = agentAuth.find((a) => constantTimeEqual(a.token, headerToken))
+    if (!auth || headerToken === '') {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
       socket.destroy()
       return
@@ -356,6 +361,10 @@ function upgrade(req: IncomingMessage, socket: import('node:stream').Duplex, hea
     return
   }
   if (url.pathname === '/agent/view') {
+    // Le viewToken est jetable, usage unique et rattaché à une session courte :
+    // il est conçu pour voyager en URL (lien de visualisation). Le jeton d'agent
+    // permanent, lui, reste strictement en en-tête ci-dessus.
+    const token = headerToken || url.searchParams.get('token') || ''
     const link = viewTokens.get(token)
     if (!link || !isLoopback(req.socket.remoteAddress)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')

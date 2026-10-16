@@ -15,13 +15,20 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
     }
     setBusy(true)
     setError(null)
-    const result = await Api.auth.validate(token.trim())
-    setBusy(false)
-    if (!result.ok) {
-      setError(result.error ?? 'Échec inconnu de la validation.')
-      return
+    // Un rejet IPC (Electron absent, handler en échec) ne doit pas laisser le
+    // bouton bloqué sur « Vérification… » : finally rétablit toujours busy.
+    try {
+      const result = await Api.auth.validate(token.trim())
+      if (!result.ok) {
+        setError(result.error ?? 'Échec inconnu de la validation.')
+        return
+      }
+      onLoggedIn()
+    } catch (err) {
+      setError(`Validation impossible : ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setBusy(false)
     }
-    onLoggedIn()
   }
 
   return (

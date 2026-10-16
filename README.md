@@ -27,10 +27,10 @@ Autres prérequis communs :
 | Plateforme | Artefact | Contenu |
 | --- | --- | --- |
 | Windows | `dist/Venari-Setup-<version>.exe` (NSIS) | dossier d'installation au choix, raccourcis bureau et menu démarrer, désinstallation propre |
-| Linux | `dist/venari-<version>.AppImage` | auto-portable : `chmod +x` puis lancer, aucun privilège requis |
+| Linux | `dist/Venari-<version>.AppImage` | auto-portable : `chmod +x` puis lancer, aucun privilège requis |
 | Linux | `dist/venari_<version>_amd64.deb` | installation native via `apt install ./venari_<version>_amd64.deb` |
 
-`<version>` est la version déclarée dans `package.json` (0.2.0 au moment d'écrire).
+`<version>` est la version déclarée dans `package.json`.
 
 Au premier lancement, collez votre token Intigriti : il est testé auprès de l'API puis chiffré au repos (voir [Chiffrement](#chiffrement-au-repos)).
 
@@ -55,13 +55,24 @@ node node_modules/electron/install.js
 | `npm start` | preview du build courant |
 | `npm run test` | tests unitaires (Vitest) |
 | `npm run typecheck` | typecheck TypeScript (main + renderer) |
+| `npm run lint` | analyse statique (oxlint, règles `correctness`, aucun avertissement accepté) |
 | `npm run build` | build `out/` (main, preload, renderer) |
-| `npm run pack:check` | tests + typecheck + build, **sans** empaquetage — la porte à utiliser en CI et sur les deux plateformes |
+| `npm run pack:check` | lint + tests + typecheck + build, **sans** empaquetage — la porte à utiliser en CI et sur les deux plateformes |
 | `npm run dist:win` | `pack:check` + installeur NSIS → `dist/Venari-Setup-<version>.exe` |
 | `npm run dist:linux` | `pack:check` + AppImage et deb → `dist/` |
 | `npm run dist:all` | les deux plateformes (à lancer sur chaque OS : un AppImage ne se cross-build pas de façon fiable) |
 | `npm run dist` | alias de `dist:win` (compatibilité) |
 | `npm run boite -- <args>` | CLI `boite` — boîte de coordination d'agents (voir ci-dessous) |
+| `npm run mcp:pair` | appaire un poste au serveur MCP : découverte LAN + échange de code contre un jeton (voir [MCP](#mcp-ia)) |
+
+### Tests
+
+`npm run test` exécute tout le dossier `tests/` avec Vitest, en deux environnements :
+
+- `tests/*.test.ts` → `node` (main, preload, services, outils) ;
+- `tests/*.test.tsx` → **jsdom**, pour les composants React du renderer. Chaque fichier porte `// @vitest-environment jsdom` en première ligne et mock le pont preload via `vi.mock('../src/renderer/src/api')` : seul le mappage état → rendu est testé, l'IPC réel reste couvert par les tests de `src/main`.
+
+Le typecheck suit la même ligne : `tsconfig.node.json` exclut les `*.tsx` (pas de JSX ni de DOM côté main), `tsconfig.web.json` les inclut. Comme Vitest tourne sans globales, l'auto-nettoyage de Testing Library ne s'active pas : chaque fichier TSX appelle `afterEach(cleanup)`.
 
 ### Boîte (CLI d'agents)
 
@@ -83,12 +94,13 @@ Codes de sortie : `0` ok, `2` usage, `3` refus (courtoisie/archivé/ready), `4` 
 
 ### Intégration continue
 
-`.github/workflows/ci.yml` s'exécute à chaque push sur `main` et à chaque pull request, sur 6 jobs :
+`.github/workflows/ci.yml` s'exécute à chaque push sur `main`, à chaque pull request et à chaque tag `v*`, sur 7 jobs :
 
 | Job | Ce qu'il prouve |
 |---|---|
 | `verify` (Windows + Linux) | `npm run pack:check` passe sur les deux plateformes |
 | `package` (Windows + Linux) | l'installeur NSIS, l'AppImage et le deb se construisent vraiment |
+| `release` (tag `v*`) | la release GitHub est créée et les artefacts (NSIS, blockmap, AppImage, deb, `latest*.yml`) y sont attachés |
 | `agent` | l'agent Rust compile et passe son test de bout en bout (Windows) |
 | `agent-windows-only` | le build de l'agent **échoue** hors Windows, avec le message explicite attendu |
 | `smoke-linux` | l'AppImage se lance et son processus tient 30 s |
@@ -102,7 +114,7 @@ Le port MCP n'est volontairement pas vérifié par les jobs de smoke test : le s
 
 ### Programmes et sync
 - Écran **Programmes** : liste paginée (recherche avec debounce, filtre favoris, tri nom/prime/récent, sens croissant/décroissant). La page affiche `x / y programmes` et le bouton **Charger la suite** déroule au-delà des 200 premiers — le catalogue n'est plus tronqué en silence.
-- **Exporter** : sélecteur CSV / JSON, avec les **filtres courants** (favori, groupe, tag, recherche), la pagination ignorée. Le fichier est écrit à l'emplacement choisi au système. CSV en UTF-8 avec BOM (Excel l'ouvre sans réglage), cellules échappées à la norme RFC 4180 et préfixées quand elles commenceraient par `=`, `+`, `-` ou `@` (injection de formule).
+- **Exporter** : sélecteur CSV / JSON / Markdown, avec les **filtres courants** (favori, groupe, tag, recherche), la pagination ignorée. Le fichier est écrit à l'emplacement choisi au système. CSV en UTF-8 avec BOM (Excel l'ouvre sans réglage), cellules échappées à la norme RFC 4180 et préfixées quand elles commenceraient par `=`, `+`, `-` ou `@` (injection de formule). Markdown produit un tableau prêt à coller dans un rapport (barres verticales et retours à la ligne échappés).
 - **Synchroniser** importe le catalogue (paginated, limite ~400 requêtes / 5 min gérée par un token bucket, retry en backoff sur 429/5xx).
 - Favoris, groupes, tags et notes : **stockés localement en SQLite**, indépendants de l'API (lecture seule). Base : `%APPDATA%\Venari\bountydesk.db` sous Windows, `~/.config/Venari/bountydesk.db` sous Linux (chemins XDG standard, résolus par `app.getPath('userData')`).
 
@@ -112,7 +124,7 @@ Le port MCP n'est volontairement pas vérifié par les jobs de smoke test : le s
 
 ### Scans low / med / high
 - Bouton **Scanner** dans le détail d'une mission : profils de profondeur — Bas (curl + nuclei low/medium), Moyen (+ tags tech/exposure, severities ≤ high), Élevé (+ ffuf, severities ≤ critical).
-- **Garde-fous** : cibles limitées au scope **in-scope** et aux endpoints HTTP(S) ; la confirmation ROE (`roeConfirm`) est optionnelle (le scan peut être lancé directement, y compris par une IA) ; les ROE restent respectées (si `automatedTooling: 0`, le scan est refusé) ; rate limit par scan ; bouton **Arrêter** toujours disponible ; tout est loggé dans `scan_events` ; exécution séquentielle, arrêt propre du process courant. Aucune soumission automatique : les rapports sont rédigés localement (`submit_report`).
+- **Garde-fous** : cibles limitées au scope **in-scope** et aux endpoints HTTP(S) ; la confirmation ROE (`roeConfirm`) est **requise** depuis l'interface (le scan ne démarre qu'après validation manuelle — seule l'outil MCP `start_scan` peut la rendre optionnelle) ; les ROE restent respectées (si `automatedTooling: 0`, le scan est refusé) ; rate limit par scan ; bouton **Arrêter** toujours disponible ; tout est loggé dans `scan_events` ; exécution séquentielle, arrêt propre du process courant. Aucune soumission automatique : les rapports sont rédigés localement (`submit_report`).
 - Si **aucun** outil du plan n'a pu être lancé, le scan se termine en `error` avec la liste des binaires manquants — il ne se présente jamais comme réussi.
 - **Un scan ne peut pas rester bloqué** : chaque étape a un plafond de 30 min (au-delà, l'outil est arrêté et le scan le dit), le flux est plafonné à 5 000 événements par scan (la troncature est annoncée, jamais silencieuse), et le bouton **Arrêter** tue l'outil *et* ses sous-processus — ffuf ou nuclei lancent des enfants, sans cela un scan orphelin continuerait après l'arrêt.
 
@@ -122,7 +134,7 @@ Le catalogue compte **144 entrées** réparties en six catégories (`recon` 65, 
 
 | Source | Nb | Installation |
 | --- | --- | --- |
-| `winget` | 24 | `winget install` (Windows) ; sous Linux, détection d'abord, puis `apt` via `pkexec` quand un paquet Debian est connu |
+| `winget` | 23 | `winget install` (Windows) ; sous Linux, détection d'abord, puis `apt` via `pkexec` quand un paquet Debian est connu |
 | `github` | 43 | asset de release téléchargé, extrait, rendu exécutable, copié dans le dossier outils |
 | `git` | 69 | `git clone` sécurisé (frameworks, wordlists, outils Python/Go) — un bouton **Guide** ouvre la doc, rien n'est compilé ni exécuté automatiquement |
 | `go` | 5 | `go install <module>@latest` avec `GOBIN` dirigé vers le dossier de l'outil |
@@ -138,7 +150,7 @@ Détails qui comptent :
 
 - **Détection d'abord** : avant toute installation, Venari cherche le binaire dans le `PATH` (via le champ `detectCmd`). Installer un outil déjà présent est sans effet, et les noms diffèrent entre plateformes (`ripgrep`→`rg`, `bat`→`batcat`, `fd`→`fdfind`, `wireshark`→`tshark`, `powershell`→`pwsh`…).
 - **Portables multi-plateformes** : pour chaque binaire GitHub, l'asset de release est choisi en fonction de la plateforme hôte (nom du binaire sans extension sous Linux, suffixe `.exe` sous Windows, `chmod +x` à l'installation). Un asset ambigu ou absent produit une erreur explicite, jamais un faux « installé ».
-- **Outils signalés non disponibles** : 23 entrées sont marquées Windows-only (Sysinternals, PowerToys, Windows Terminal…) et 29 sont des applications graphiques ; l'app refuse de tenter une installation qui n'a pas de sens sur la plateforme, avec une explication.
+- **Outils signalés non disponibles** : 2 entrées sont marquées Windows-only (chisel, Fiddler Classic) et 4 sont des applications graphiques (Burp Suite, Postman, Insomnia, Bruno) ; l'app refuse de tenter une installation qui n'a pas de sens sur la plateforme, avec une explication.
 - **Token GitHub optionnel** (écran Outils) : les downloads passent par l'API GitHub, qui est limitée à 60 requêtes/heure sans authentification. Le token est chiffré au repos.
 
 ### MCP (IA)
@@ -147,6 +159,7 @@ Détails qui comptent :
 - Adresse du serveur (locale et LAN) copiable en 1 clic, et un tableau **Activité des IA** journalise chaque appel d'outil (poste, outil, statut, durée).
 - **Outils MCP** (18) : `list_programs` (paginé : `limit` / `offset`, total annoncé dans `details`), `get_program_detail`, `list_credentials` (sans secret), `set_note` / `list_notes` (notes horodatées, lecture seule pour la seconde), `list_tools`, `install_tool`, `open_browser`, `fetch_page`, `list_scans`, `start_scan` (mêmes garde-fous que l'UI, `roeConfirm` optionnel), `get_scan`, `scan_events`, `dedupe_findings`, `cvss_score`, `run_tool` (exécution *encadrée* d'un binaire du catalogue, whitelist stricte par défaut), `http_request` (requête HTTP personnalisée confinée aux hôtes *in-scope* du programme, sans confirmation), `submit_report` (rapport Markdown écrit dans `reports/`, **aucune soumission externe**).
 - Exemple de config `claude_desktop_config.json` / `opencode.json` fourni dans l'app.
+- **Appairage sans config manuelle** : l'app affiche un **code à usage unique (6 caractères, 5 minutes)** ; sur le poste à connecter, `npm run mcp:pair` découvre le serveur sur le réseau local (sonde UDP, repli loopback), échange le code contre un **jeton dédié** et imprime la config MCP prête à coller. Le serveur répond aussi à `GET /.well-known/venari.json` (pairId, port, hôtes — **aucun jeton**) et à `POST /pair`.
 - Pare-feu : l'app vérifie l'état de la règle d'ouverture du port et sait la créer — `netsh` sous Windows, `ufw` / `firewall-cmd` via `pkexec` sous Linux. Sur les autres plateformes, l'état est honnêtement rapporté « non géré ». La règle est **limitée au réseau privé** (profils `private` sous Windows, sources RFC1918 sous Linux) et **retirée à la désactivation du serveur**.
 - **Le mode LAN n'est accordé que sur un réseau privé** (10/8, 172.16/12, 192.168/16). La vérification est faite dans `startMcpServer` lui-même : aucun appelant ne peut obtenir `0.0.0.0` depuis un café ou un partage public, même en le demandant explicitement.
 
@@ -186,7 +199,7 @@ Les secrets (token Intigriti, credentials de mission, jetons MCP, token GitHub) 
 | Linux avec keyring (GNOME Keyring, KWallet, libsecret) | `safeStorage` |
 | Linux **sans** keyring (poste headless, session sans agent) | repli interne : AES-256-GCM, clé scrypt dérivée et stockée dans un fichier `0600` du dossier utilisateur |
 
-Le mécanisme réellement utilisé est visible dans l'app. Le repli AES-GCM protège le fichier au repos mais ne bénéficie pas dunir de session du système : sur un poste Linux sans keyring, préférez-en un.
+Le mécanisme réellement utilisé est visible dans l'app. Le repli AES-GCM protège le fichier au repos mais ne bénéficie pas du verrou de session du système : sur un poste Linux sans keyring, préférez-en un.
 
 ## Sécurité
 
@@ -194,7 +207,10 @@ Le mécanisme réellement utilisé est visible dans l'app. Le repli AES-GCM prot
 - Renderer isolé : `contextIsolation`, pas de `nodeIntegration`, `sandbox`, CSP stricte au build.
 - Toute entrée IPC est validée (zod) ; les schémas API sont dérivés de la spec OpenAPI officielle fournie dans `openapi/researcher.swagger.json`.
 - L'API Intigriti est utilisée en **lecture seule** ; les favoris/groups/tags/notes/credentials sont strictement locaux.
-- Serveur MCP : JSON-RPC sur `POST`, authentification par jeton Bearer, **aucun header CORS** (un navigateur cross-origin ne peut pas consommer le serveur), liste blanche d'outils par défaut (les shells sont refusés).
+- Serveur MCP : JSON-RPC sur `POST`, authentification par jeton Bearer, **aucun header CORS** (un navigateur cross-origin ne peut pas consommer le serveur), liste blanche d'outils par défaut (coquilles, interpréteurs et téléchargeurs refusés, y compris via le catalogue).
+- **Transport LAN en clair (HTTP/WS sans TLS)** : le jeton circule donc en clair sur le réseau local. Il n'est **jamais** placé dans l'URL (en-tête `Authorization: Bearer` uniquement, y compris pour l'agent) afin d'éviter sa fuite par journaux, proxys et historique, mais un observateur passif du LAN peut l'intercepter. À n'exposer que sur un réseau privé de confiance ; les jetons sont révocables en 1 clic en cas de doute.
+- **Filtre SSRF** : `fetch_page` et `http_request` refusent les cibles locales et privées (loopback, RFC1918, link-local, `*.internal`) après résolution DNS, à chaque saut de redirection ; `http_request` respecte les ROE du programme (outils automatisés interdits) en plus du scope.
+- `run_tool` refuse les coquilles, interpréteurs et binaires-téléchargeurs, même présents au catalogue : aucune évasion shell ni exécution de code arbitraire via une ligne de commande.
 
 ## Structure
 

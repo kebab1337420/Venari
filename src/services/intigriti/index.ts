@@ -10,7 +10,6 @@ export {
   ApiError,
   AuthError,
   BountyDeskError,
-  HttpError,
   NetworkError,
   RateLimitError,
   RetryableError

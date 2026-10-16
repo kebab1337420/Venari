@@ -1,4 +1,4 @@
-import type { ProgramSummary, ProgramsQuery } from '../../shared/ipc'
+import type { ExportFormat, ProgramSummary, ProgramsQuery } from '../../shared/ipc'
 
 /**
  * Export du catalogue local (programmes + métadonnées locales : favoris,
@@ -88,11 +88,27 @@ export function toJson(records: ProgramSummary[]): string {
   return `${JSON.stringify(records, null, 2)}\n`
 }
 
-export function serializeExport(records: ProgramSummary[], format: 'csv' | 'json'): string {
-  return format === 'json' ? toJson(records) : toCsv(records)
+/** Une cellule markdown ne doit pas casser le tableau : on échappe `|` et on
+ * remplace les retours à la ligne, sinon la ligne du tableau est rompue. */
+function mdCell(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
 }
 
-export function exportFileName(format: 'csv' | 'json', at: number = Date.now()): string {
+/** Tableau Markdown collable dans un rapport ou un ticket. */
+export function toMarkdown(records: ProgramSummary[]): string {
+  const header = `| ${EXPORT_COLUMNS.join(' | ')} |`
+  const separator = `| ${EXPORT_COLUMNS.map(() => '---').join(' | ')} |`
+  const rows = records.map((p) => `| ${programExportRow(p).map((v) => mdCell(String(v ?? ''))).join(' | ')} |`)
+  return `${[header, separator, ...rows].join('\n')}\n`
+}
+
+export function serializeExport(records: ProgramSummary[], format: ExportFormat): string {
+  if (format === 'json') return toJson(records)
+  if (format === 'md') return toMarkdown(records)
+  return toCsv(records)
+}
+
+export function exportFileName(format: ExportFormat, at: number = Date.now()): string {
   const day = new Date(at).toISOString().slice(0, 10)
   return `venari-programmes-${day}.${format}`
 }

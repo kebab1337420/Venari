@@ -30,7 +30,7 @@ const programsQuerySchema = z.object({
  */
 const programsExportSchema = programsQuerySchema
   .omit({ limit: true, offset: true })
-  .extend({ format: z.enum(['csv', 'json']) })
+  .extend({ format: z.enum(['csv', 'json', 'md']) })
 
 export function registerProgramsIpc(): void {
   ipcMain.handle(IPC.ProgramsList, (_event, rawQuery) => {
@@ -40,7 +40,6 @@ export function registerProgramsIpc(): void {
   })
 
   ipcMain.handle(IPC.ProgramsSync, async () => {
-    const repo = getRepository()
     const client = getClient()
     if (!client.getToken()) return { ok: false, error: 'Aucun token configuré' } as const
     const synced = await syncPrograms(client)
@@ -63,7 +62,9 @@ export function registerProgramsIpc(): void {
       filters:
         format === 'csv'
           ? [{ name: 'CSV (UTF-8)', extensions: ['csv'] }]
-          : [{ name: 'JSON', extensions: ['json'] }],
+          : format === 'json'
+            ? [{ name: 'JSON', extensions: ['json'] }]
+            : [{ name: 'Markdown', extensions: ['md'] }],
     })
     if (canceled || !filePath) {
       return { ok: false, error: 'Export annulé.', canceled: true } as const

@@ -14,18 +14,21 @@ export function registerToolsIpc(): void {
 
   ipcMain.handle(IPC.ToolsGitHubTokenGet, async (): Promise<GitHubTokenStatusResult> => {
     try {
-      return { ok: true, configured: (process.env.GITHUB_TOKEN ?? loadGithubToken()) !== null }
+      // `||` (et non `??`) : une variable d'environnement vide ou un jeton
+      // stocké vide ne comptent pas comme une configuration.
+      return { ok: true, configured: Boolean(process.env.GITHUB_TOKEN || loadGithubToken()) }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
 
   ipcMain.handle(IPC.ToolsGitHubTokenSet, async (_event, raw: unknown): Promise<GitHubTokenSetResult> => {
-    if (typeof raw !== 'string' || raw.length < 1 || raw.length > 200) {
+    const token = typeof raw === 'string' ? raw.trim() : ''
+    if (token.length < 1 || token.length > 200) {
       return { ok: false, error: 'Token GitHub invalide.' }
     }
     try {
-      saveGithubToken(raw.trim())
+      saveGithubToken(token)
       return { ok: true }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }

@@ -357,7 +357,7 @@ function deliverHeld(db: DatabaseSync, agent: AgentRow, now: number): boolean {
 // Une pause retient les messages ; la reprise les livre — et une livraison
 // réactive les projets suspendus de l'agent.
 export function pauseAgent(db: DatabaseSync, address: string): AgentRow {
-  return setState(db, address, ['idle', 'queued', 'running', 'waiting'], (agent) => ({
+  return setState(db, address, ['idle', 'queued', 'running', 'waiting'], () => ({
     state: 'paused',
     projects_suspended: 1
   }))

@@ -44,7 +44,33 @@ function validOverviewPage(): unknown {
   }
 }
 
+const PROGRAM_DETAIL_ID = 'a4d1a933-cf5f-4e2d-ae8f-5b5e6f6a9d01'
+
+function validProgramDetail(): unknown {
+  return {
+    id: PROGRAM_DETAIL_ID,
+    handle: 'acme',
+    name: 'ACME',
+    following: true,
+    confidentialityLevel: { id: 3, value: 'public' },
+    status: { id: 1, value: 'active' },
+    type: { id: 1, value: 'web' },
+    domains: { id: PROGRAM_DETAIL_ID, createdAt: 0, content: [] },
+    rulesOfEngagement: null,
+    webLinks: { detail: 'https://intigriti.com/programs/acme' }
+  }
+}
+
 describe('IntigritiClient', () => {
+  it('encode les identifiants dans le chemin (anti-injection)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(validProgramDetail()))
+    const client = makeClient(fetchMock)
+    await client.getProgram('a/b c?d')
+    const call = fetchMock.mock.calls[0] as unknown as [string]
+    expect(call[0]).toContain('/v1/programs/a%2Fb%20c%3Fd')
+    expect(call[0]).not.toContain('a/b c?d')
+  })
+
   it('envoie le bearer token et parse une page valide', async () => {
     const fetchMock = vi.fn(async () => jsonResponse(validOverviewPage()))
     const client = makeClient(fetchMock, { token: 'tok123' })

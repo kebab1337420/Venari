@@ -57,6 +57,11 @@ function browserSession(): Session {
   // du module la ou aucun BrowserWindow n'existe.
   const { session } = require('electron') as typeof import('electron')
   const ses = session.fromPartition(BROWSER_PARTITION)
+  // La partition dediee n'herite pas des handlers poses sur defaultSession
+  // (security.ts) : sans ces deux appels, Electron auto-approuverait toute
+  // demande de permission (notifications, geoloc, micro/camera, presse-papiers).
+  ses.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+  ses.setPermissionCheckHandler(() => false)
   if (!cspRegistered) {
     ses.webRequest.onHeadersReceived((details, callback) => {
       // Ce CSP n'est écrit que sur la page de confiance. Étendu aux réponses
@@ -179,12 +184,5 @@ function getOrCreateBrowserWindow(): BrowserWindow {
 export function registerBrowserIpc(): void {
   ipcMain.handle(IPC.BrowserOpen, async (_e, targetUrl?: string) => {
     return openBrowserWindow(typeof targetUrl === 'string' ? targetUrl : undefined)
-  })
-
-  ipcMain.handle(IPC.BrowserClose, async () => {
-    if (browserWindow && !browserWindow.isDestroyed()) {
-      browserWindow.close()
-    }
-    return { ok: true }
   })
 }

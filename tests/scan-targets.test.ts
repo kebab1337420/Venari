@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveWebTarget } from '../src/shared/scan-targets'
+import { resolveWebTarget, scannableWebTarget } from '../src/shared/scan-targets'
 
 describe('resolveWebTarget', () => {
   it('accepte un endpoint http(s) tel quel', () => {
@@ -23,5 +23,19 @@ describe('resolveWebTarget', () => {
     expect(resolveWebTarget('')).toBeNull()
     expect(resolveWebTarget('   ')).toBeNull()
     expect(resolveWebTarget('not a url')).toBeNull()
+  })
+})
+
+describe('scannableWebTarget', () => {
+  it('accepte une URL web ordinaire', () => {
+    expect(scannableWebTarget('https://a.example.com')?.href).toBe('https://a.example.com/')
+    expect(scannableWebTarget('a.example.com')?.href).toBe('https://a.example.com/')
+  })
+
+  it('ecarte les cibles wildcard (hote contenant *)', () => {
+    expect(scannableWebTarget('*.a.example.com')).toBeNull()
+    expect(scannableWebTarget('*a.example.com')).toBeNull()
+    expect(scannableWebTarget('https://*.a.example.com/path')).toBeNull()
+    expect(scannableWebTarget('https://a.example.com/*')).not.toBeNull()
   })
 })

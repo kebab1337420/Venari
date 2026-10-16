@@ -25,3 +25,19 @@ export function resolveWebTarget(endpoint: string): URL | null {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
   return url
 }
+
+/**
+ * URL web directement scannable. Contrairement a `resolveWebTarget`, ecarte les
+ * cibles wildcard (`*.example.com`) : curl et nuclei ne resolvent pas un hote
+ * contenant `*`. Le statut de l'apex depend du programme et n'est pas deductible
+ * de l'endpoint (l'enumeration de sous-domaines n'est pas supportee) : on n'emet
+ * donc pas de cible invalide plutot que de deviner.
+ *
+ * A utiliser pour CIBLER un scan ; `resolveWebTarget` reste la reference pour la
+ * normalisation d'hote (ex. `inScopeHosts`, qui conserve le retrait de `*.`).
+ */
+export function scannableWebTarget(endpoint: string): URL | null {
+  const url = resolveWebTarget(endpoint)
+  if (!url || url.hostname.includes('*')) return null
+  return url
+}

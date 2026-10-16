@@ -182,6 +182,22 @@ describe('Repository', () => {
     expect(asc).toEqual([...seen].reverse())
   })
 
+  it('trie par prime de façon totale : la pagination ne saute ni ne répète', () => {
+    // Même prime ET même nom : sans dernier critère (p.id), l'ordre SQL n'est
+    // pas total et OFFSET saute ou répète des lignes d'une page à l'autre.
+    for (let i = 1; i <= 5; i += 1) {
+      repo.upsertProgram(sample({ id: `prog-${i}`, handle: `h${i}`, name: 'Acme Corp' }))
+    }
+
+    const seen: string[] = []
+    for (const offset of [0, 2, 4]) {
+      const page = repo.listPrograms({ sort: 'bounty', dir: 'desc', limit: 2, offset })
+      seen.push(...page.records.map((r) => r.id))
+    }
+    expect(seen).toHaveLength(5)
+    expect(new Set(seen).size).toBe(5)
+  })
+
   it('traite les jokers LIKE de la recherche comme des caractères littéraux', () => {
     repo.upsertProgram(sample({ id: 'p-1', handle: 'h1', name: 'Remise 100%' }))
     repo.upsertProgram(sample({ id: 'p-2', handle: 'h2', name: 'Remise 1000' }))

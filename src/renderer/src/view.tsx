@@ -22,6 +22,7 @@ export default function View(): React.JSX.Element {
     let closed = false
     void (async () => {
       const res = await Api.agent.viewToken()
+      if (closed) return
       if (!res.ok) {
         setMessage('Fenêtre de vue invalide (jeton refusé).')
         return
@@ -29,6 +30,10 @@ export default function View(): React.JSX.Element {
       const token = res.token
       tokenRef.current = token
       const status = await Api.mcp.status()
+      // Le cleanup ne ferme que wsRef.current : si le composant a été démonté
+      // pendant les attentes, ouvrir la socket ici la laisserait en vie (avec un
+      // viewer rattaché côté serveur).
+      if (closed) return
       const port = status.port ?? 8787
       const ws = new WebSocket(`ws://127.0.0.1:${port}/agent/view?token=${encodeURIComponent(token)}`)
       wsRef.current = ws

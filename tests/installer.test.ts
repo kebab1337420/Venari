@@ -123,6 +123,11 @@ describe('selectWindowsAsset (sélection d’asset Windows)', () => {
 })
 
 describe('assertStaysInside (archive qui sortirait du dossier)', () => {
+  // Ces tests lancent `tar -tf` (runCapture, delai interne DETECT_TIMEOUT_MS =
+  // 10 000 ms) : le timeout par defaut de vitest (5 000 ms) est trop court sur
+  // un runner CI charge, d'ou un timeout explicite.
+  const TAR_TEST_TIMEOUT_MS = 15_000
+
   // tar ustar construit à la main : aucun binaire de fixture à versionner.
   function buildTar(names: string[]): Buffer {
     const blocks: Buffer[] = []
@@ -156,15 +161,15 @@ describe('assertStaysInside (archive qui sortirait du dossier)', () => {
 
   it('laisse passer une archive ordinaire', async () => {
     await expect(assertStaysInside(writeTar(['tool.exe', 'README.md']))).resolves.toBeUndefined()
-  })
+  }, TAR_TEST_TIMEOUT_MS)
 
   it('refuse une entrée ../', async () => {
     await expect(assertStaysInside(writeTar(['../escaped.txt']))).rejects.toThrow(/hors dossier/)
-  })
+  }, TAR_TEST_TIMEOUT_MS)
 
   it('refuse un ../ noyé dans un chemin', async () => {
     await expect(assertStaysInside(writeTar(['bin/../../escaped.txt']))).rejects.toThrow(/hors dossier/)
-  })
+  }, TAR_TEST_TIMEOUT_MS)
 })
 
 describe('unsafeArchiveEntry (validation pure d’une entrée)', () => {

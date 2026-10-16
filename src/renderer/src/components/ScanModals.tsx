@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ProgramDetailData, ProgramSummary, ScanDepth, ScanEvent, ScanRecord } from '../../../shared/ipc'
+import { resolveWebTarget } from '../../../shared/scan-targets'
 import { Api } from '../api'
 import { Modal } from './Modal'
 
@@ -30,7 +31,10 @@ export function ScanSetupModal({ program, detail, onClose, onStarted, onViewLog 
     })
   }, [program.id])
 
-  const targets = detail.scope.filter((d) => d.inScope && /^https?:\/\//i.test(d.endpoint))
+  // Même résolution que le plan de scan côté main : sinon l'UI annonçait
+  // « aucune cible » (bouton désactivé) pour des endpoints sans schéma que le
+  // backend, lui, scannait.
+  const targets = detail.scope.filter((d) => d.inScope && resolveWebTarget(d.endpoint) !== null)
 
   const launch = async (): Promise<void> => {
     if (!confirm) return

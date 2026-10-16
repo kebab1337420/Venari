@@ -1,4 +1,4 @@
-appId: com.bountydesk.app
+appId: com.venari.app
 productName: Venari
 copyright: Copyright © 2026 whitehat
 
@@ -37,7 +37,20 @@ linux:
       StartupWMClass: Venari
       MimeType: x-scheme-handler/venari;
 
+# Sans ce bloc, le paquet Debian herite du nom npm interne (`bountydesk`) pour
+# son identifiant et son fichier. `packageName` doit rester en minuscules (regle
+# Debian) ; l'artifactName suit la convention Debian `nom_version_arch.deb`.
+deb:
+  packageName: venari
+  artifactName: venari_${version}_${arch}.${ext}
+
 nsis:
+  # GUID NSIS FIGE sur l'ancienne valeur (UUID.v5('com.bountydesk.app', NS_UUID) chez
+  # app-builder-lib, voir NsisTarget.js). La detection de version precedente et les cles
+  # de registre (install + desinstallation) derivent du guid : sans ce figeage, une
+  # installation existante ne serait plus reconnue et laisserait une entree
+  # « Programmes et fonctionnalites » orpheline.
+  guid: 0044a2be-1027-53ff-a499-b09e857f6ea5
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

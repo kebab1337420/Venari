@@ -17,6 +17,8 @@ import {
   type McpDiagnoseResult,
   type McpFirewallFixResult,
   type McpMachinesResult,
+  type McpPairingCancelResult,
+  type McpPairingCreateResult,
   type McpRegenerateResult,
   type McpRequestsResult,
   type McpSetEnabledResult,
@@ -33,15 +35,19 @@ import {
 } from './storage'
 import { getRepository } from './db'
 import {
+  addMcpToken,
   generateMcpToken,
   generateMcpTokenId,
+  getMcpPairId,
   getMcpStatus,
   getPrimaryMcpToken,
   isPrivateNetwork,
   maskToken,
+  setPairingRedeem,
   startMcpServer,
   stopMcpServer,
 } from './services/mcp/server'
+import { createPairingCode, currentPairing, redeemPairingCode, resetPairing } from './services/mcp/pairing'
 import {
   agentSessions,
   agentStatuses,
@@ -120,6 +126,16 @@ function runNetsh(args: string[]): Promise<{ code: number; stdout: string; stder
   })
 }
 
+/**
+ * netsh ne detaille les champs d'une regle que si elle existe ; le nom y est
+ * recopie tel quel, quelle que soit la langue de l'interface (l'etiquette est
+ * localisee, pas la valeur). Une recherche sur l'ancien nom « bountydesk »
+ * ne renvoyait donc jamais 'ok' depuis le renommage en Venari.
+ */
+export function netshRuleFound(r: { code: number; stdout: string }): boolean {
+  return r.code === 0 && r.stdout.toLowerCase().includes(FIREWALL_RULE.toLowerCase())
+}
+
 function runCli(
   cmd: string,
   args: string[]
@@ -160,7 +176,7 @@ async function firewallState(): Promise<McpDiagnoseInfo['firewall']> {
   }
   try {
     const r = await runNetsh(['show', 'rule', `name=${FIREWALL_RULE}`])
-    if (r.code === 0 && r.stdout.toLowerCase().includes('bountydesk')) return 'ok'
+    if (netshRuleFound(r)) return 'ok'
     return 'missing'
   } catch {
     return 'unmanaged'
@@ -309,6 +325,22 @@ async function restartIfRunning(cfg: {
 }
 
 export function registerMcpIpc(): void {
+  // L'appairage echange un code a usage unique contre un jeton dedie. Le jeton
+  // est ajoute au serveur *sans redemarrage* (la requete /pair en cours serait
+  // coupee) puis persiste, pour qu'un redemarrage le conserve.
+  setPairingRedeem(async (code) => {
+    const redeemed = redeemPairingCode(code)
+    if (!redeemed.ok) return redeemed
+    const cfg = loadMcpConfig()
+    const id = generateMcpTokenId()
+    const token = generateMcpToken()
+    const label = 'Poste appairé'
+    const tokens = [...cfg.tokens, { id, label, token }]
+    saveMcpConfig({ enabled: cfg.enabled, port: cfg.port, lan: cfg.lan, tokens, agents: cfg.agents })
+    addMcpToken(token, label)
+    return { ok: true, token, label }
+  })
+
   ipcMain.handle(IPC.McpStatus, (): McpStatusInfo => {
     return joinStatus(getMcpStatus())
   })
@@ -329,8 +361,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.McpTokenAdd, async (_event, raw: unknown): Promise<McpTokenAddResult> => {
-    const { label } = z.object({ label: z.string().trim().min(1).max(60) }).parse(raw)
     try {
+      const { label } = z.object({ label: z.string().trim().min(1).max(60) }).parse(raw)
       const cfg = loadMcpConfig()
       const newId = generateMcpTokenId()
       const token = generateMcpToken()
@@ -344,8 +376,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.McpTokenRevoke, async (_event, raw: unknown): Promise<McpTokenRevokeResult> => {
-    const { id } = z.object({ id: z.string().min(1).max(100) }).parse(raw)
     try {
+      const { id } = z.object({ id: z.string().min(1).max(100) }).parse(raw)
       const cfg = loadMcpConfig()
       if (cfg.tokens.length <= 1) {
         return { ok: false as const, error: 'Au moins un jeton est requis : révoquer ce jeton couperait tous les clients.' }
@@ -363,14 +395,14 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.McpSetEnabled, async (_event, raw: unknown): Promise<McpSetEnabledResult> => {
-    const { enabled, port, lan } = z
-      .object({
-        enabled: z.boolean(),
-        port: z.number().int().min(1024).max(65535).nullable().optional(),
-        lan: z.boolean().optional(),
-      })
-      .parse(raw)
     try {
+      const { enabled, port, lan } = z
+        .object({
+          enabled: z.boolean(),
+          port: z.number().int().min(1024).max(65535).nullable().optional(),
+          lan: z.boolean().optional(),
+        })
+        .parse(raw)
       const cfg = loadMcpConfig()
       if (enabled) {
         if (cfg.tokens.length === 0) {
@@ -410,8 +442,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.McpRequests, (_event, raw: unknown): McpRequestsResult => {
-    const { limit } = z.object({ limit: z.number().int().min(1).max(500).optional() }).parse(raw)
     try {
+      const { limit } = z.object({ limit: z.number().int().min(1).max(500).optional() }).parse(raw)
       const rows = getRepository()
         .listMcpRequests(limit ?? 100)
         .map((r) => ({
@@ -474,8 +506,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.McpMachines, (_event, raw: unknown): McpMachinesResult => {
-    const { limit } = z.object({ limit: z.number().int().min(1).max(200).optional() }).parse(raw)
     try {
+      const { limit } = z.object({ limit: z.number().int().min(1).max(200).optional() }).parse(raw)
       const machines = getRepository()
         .mcpMachines(limit ?? 50)
         .map((m) => ({
@@ -489,6 +521,40 @@ export function registerMcpIpc(): void {
     } catch (err) {
       return handleError(err)
     }
+  })
+
+  ipcMain.handle(IPC.McpPairingCreate, (): McpPairingCreateResult => {
+    try {
+      const info = getMcpStatus()
+      if (!info.running) {
+        return { ok: false, error: 'Activez le serveur MCP avant d’appairer un poste.' }
+      }
+      const pairId = getMcpPairId()
+      if (!pairId) {
+        return { ok: false, error: 'Paire indisponible : redémarrez le serveur MCP.' }
+      }
+      // Un code deja actif est renvoye tel quel : regenerer a chaque clic
+      // invaliderait un code que l'utilisateur vient de dicter.
+      const pairing = currentPairing() ?? createPairingCode()
+      return {
+        ok: true,
+        pairing: {
+          code: pairing.code,
+          expiresAt: pairing.expiresAt,
+          pairId,
+          port: info.port,
+          lan: info.lan,
+          hosts: info.hosts,
+        },
+      }
+    } catch (err) {
+      return handleError(err)
+    }
+  })
+
+  ipcMain.handle(IPC.McpPairingCancel, (): McpPairingCancelResult => {
+    resetPairing()
+    return { ok: true }
   })
 
   ipcMain.handle(IPC.AgentTokens, (): AgentTokensResult => {
@@ -507,8 +573,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.AgentTokenAdd, async (_event, raw: unknown): Promise<AgentTokenAddResult> => {
-    const { label } = z.object({ label: z.string().trim().min(1).max(60) }).parse(raw)
     try {
+      const { label } = z.object({ label: z.string().trim().min(1).max(60) }).parse(raw)
       const cfg = loadMcpConfig()
       const newId = generateMcpTokenId()
       const token = generateMcpToken()
@@ -530,8 +596,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.AgentTokenRevoke, async (_event, raw: unknown): Promise<AgentTokenRevokeResult> => {
-    const { id } = z.object({ id: z.string().min(1).max(100) }).parse(raw)
     try {
+      const { id } = z.object({ id: z.string().min(1).max(100) }).parse(raw)
       const cfg = loadMcpConfig()
       const agents = cfg.agents.filter((t) => t.id !== id)
       if (agents.length === cfg.agents.length) {
@@ -568,8 +634,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.AgentSessionRequest, (_event, raw: unknown): AgentSessionRequestResult => {
-    const { tokenId } = z.object({ tokenId: z.string().min(1).max(100) }).parse(raw)
     try {
+      const { tokenId } = z.object({ tokenId: z.string().min(1).max(100) }).parse(raw)
       const r = requestSession(tokenId)
       if ('row' in r) {
         const row = r.row
@@ -593,8 +659,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.AgentSessionDecide, async (_event, raw: unknown): Promise<AgentSessionDecideResult> => {
-    const { sessionId, approve } = z.object({ sessionId: z.number().int().min(1), approve: z.boolean() }).parse(raw)
     try {
+      const { sessionId, approve } = z.object({ sessionId: z.number().int().min(1), approve: z.boolean() }).parse(raw)
       const r = decideSession(sessionId, approve)
       if (!r.ok) return r
       if (approve && r.viewToken) {
@@ -614,13 +680,13 @@ export function registerMcpIpc(): void {
   // Copie un secret dans le presse-papier. Le renderer choisit *quel* secret,
   // jamais son contenu : il ne voit que le masque renvoye par les autres canaux.
   ipcMain.handle(IPC.SecretCopy, async (_event, raw: unknown): Promise<SecretCopyResult> => {
-    const { kind, id } = z
-      .object({
-        kind: z.enum(['mcpToken', 'agentToken', 'mcpConfig', 'agentConfig']),
-        id: z.string().min(1).max(100).optional(),
-      })
-      .parse(raw)
     try {
+      const { kind, id } = z
+        .object({
+          kind: z.enum(['mcpToken', 'agentToken', 'mcpConfig', 'agentConfig']),
+          id: z.string().min(1).max(100).optional(),
+        })
+        .parse(raw)
       const cfg = loadMcpConfig()
       const info = getMcpStatus()
       const primary = cfg.tokens[0]?.token
@@ -651,8 +717,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.AgentSessionEnd, (_event, raw: unknown): DbResult => {
-    const { viewToken } = z.object({ viewToken: z.string().min(1).max(200) }).parse(raw)
     try {
+      const { viewToken } = z.object({ viewToken: z.string().min(1).max(200) }).parse(raw)
       endSessionByViewToken(viewToken)
       return { ok: true }
     } catch (err) {

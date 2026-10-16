@@ -57,7 +57,7 @@ jobs:
       - name: Binaire Electron
         run: node node_modules/electron/install.js
 
-      - name: Tests + typecheck + build
+      - name: Lint + tests + typecheck + build
         run: npm run pack:check
 
       - uses: actions/upload-artifact@v4
@@ -148,7 +148,7 @@ jobs:
         run: |
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-              --generate-release-notes --verify-tag
+              --generate-notes --verify-tag
 
       - name: Attacher setup, blockmap et latest.yml
         env:

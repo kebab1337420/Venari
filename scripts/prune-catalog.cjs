@@ -46,10 +46,6 @@ while (i < lines.length) {
   i++
 }
 
-const missing = [...REMOVE].filter((id) => {
-  // on sait qu'on l'a vue si removed correspond; on recalcule
-  return false
-})
 fs.writeFileSync(FILE, out.join('\n'), 'utf8')
 console.log(`entrees retirees : ${removed} / ${REMOVE.size}`)
 if (removed !== REMOVE.size) {

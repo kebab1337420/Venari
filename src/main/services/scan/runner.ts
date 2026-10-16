@@ -54,6 +54,12 @@ function binary(tool: string): string {
  */
 const STEP_TIMEOUT_MS = 30 * 60 * 1000
 
+/**
+ * Plafond global d'un scan : 4 etapes x un grand nombre de cibles pouvait
+ * durer des heures. Au-dela, le scan est arrete proprement.
+ */
+const TOTAL_TIMEOUT_MS = 60 * 60 * 1000
+
 /** Plafond d'événements conservés par scan : un outil bavard ne sature pas la base. */
 const MAX_EVENTS = 5000
 
@@ -63,6 +69,8 @@ export interface ScanRunnerOptions {
   stepTimeoutMs?: number
   /** Plafond d'événements conservés sur toute la durée du scan. */
   maxEvents?: number
+  /** Plafond de durée de tout le scan, en ms (défaut 60 min). */
+  totalTimeoutMs?: number
 }
 
 export class ScanRunner {
@@ -77,6 +85,8 @@ export class ScanRunner {
   private closed = false
   private readonly stepTimeoutMs: number
   private readonly maxEvents: number
+  private readonly totalTimeoutMs: number
+  private readonly deadline: number
 
   constructor(
     private readonly scanId: number,
@@ -84,7 +94,13 @@ export class ScanRunner {
   ) {
     this.stepTimeoutMs = options.stepTimeoutMs ?? STEP_TIMEOUT_MS
     this.maxEvents = options.maxEvents ?? MAX_EVENTS
+    this.totalTimeoutMs = options.totalTimeoutMs ?? TOTAL_TIMEOUT_MS
+    this.deadline = Date.now() + this.totalTimeoutMs
     runners.set(scanId, this)
+  }
+
+  private expired(): boolean {
+    return Date.now() >= this.deadline
   }
 
   isStopped(): boolean {
@@ -156,8 +172,20 @@ export class ScanRunner {
     )
   }
 
+  /**
+   * Clôt le scan. Invariant : TOUT événement (y compris l'avis de troncature,
+   * écrit hors lot par flushSuppressed) doit être en base AVANT le statut final.
+   * Le renderer cesse de poller dès qu'il voit un statut final (ScanProgressModal) :
+   * un événement écrit après serait invisible à l'écran.
+   */
+  private finish(status: 'done' | 'error' | 'stopped'): void {
+    this.closed = true
+    this.flushEvents()
+    this.flushSuppressed()
+    getRepository().updateScan(this.scanId, { status, finishedAt: Date.now() })
+  }
+
   async run(plan: ScanPlan): Promise<void> {
-    const repo = getRepository()
     try {
       this.log('info', `Scan démarré (${plan.depth}, ${plan.rateLimit} req/s) — ${plan.targets.length} cibles`)
       for (const t of plan.targets) this.log('info', `cible: ${t}`)
@@ -168,7 +196,7 @@ export class ScanRunner {
       const timedOutTools = new Set<string>()
       let ranTools = 0
       for (const step of plan.steps) {
-        if (this.stopped) break
+        if (this.stopped || this.expired()) break
         if (step.args.includes('MISSING_WORDLIST')) {
           const wl = resolveWordlist()
           if (wl) {
@@ -201,15 +229,13 @@ export class ScanRunner {
         await sleep(intervalMs)
       }
 
-      // On passe en écriture immédiate avant toute mise à jour du statut :
-      // l'interface cesse de poller dès qu'elle voit un statut final, un lot
-      // restant serait perdu à l'écran (il resterait en base).
-      this.closed = true
-      this.flushEvents()
+      if (!this.stopped && this.expired()) {
+        this.log('warn', `Plafond global de ${Math.round(this.totalTimeoutMs / 60000)} min atteint, scan arrêté avant la fin du plan`)
+      }
 
       if (this.stopped) {
         this.log('warn', 'Scan interrompu par l’utilisateur')
-        repo.updateScan(this.scanId, { status: 'stopped', finishedAt: Date.now() })
+        this.finish('stopped')
       } else if (ranTools === 0 && (missingTools.size > 0 || timedOutTools.size > 0)) {
         // Ne jamais annoncer « terminé » quand aucun binaire n'a pu être lancé :
         // l'utilisateur croirait avoir scanné alors que rien n'a tourné.
@@ -224,7 +250,7 @@ export class ScanRunner {
             `Aucun outil n’a rendu de résultat avant le plafond de ${Math.round(this.stepTimeoutMs / 1000)} s (${[...timedOutTools].join(', ')}).`
           )
         }
-        repo.updateScan(this.scanId, { status: 'error', finishedAt: Date.now() })
+        this.finish('error')
       } else if (missingTools.size > 0 || timedOutTools.size > 0) {
         const notes: string[] = []
         if (missingTools.size > 0) {
@@ -234,15 +260,16 @@ export class ScanRunner {
           notes.push(`${timedOutTools.size} étape(s) arrêtées au plafond de ${Math.round(this.stepTimeoutMs / 1000)} s : ${[...timedOutTools].join(', ')}`)
         }
         this.log('warn', `Scan terminé, mais ${notes.join(' ; ')}`)
-        repo.updateScan(this.scanId, { status: 'done', finishedAt: Date.now() })
+        this.finish('done')
       } else {
         this.log('ok', 'Scan terminé')
-        repo.updateScan(this.scanId, { status: 'done', finishedAt: Date.now() })
+        this.finish('done')
       }
     } catch (err) {
       this.log('err', `Erreur du moteur: ${err instanceof Error ? err.message : String(err)}`)
-      repo.updateScan(this.scanId, { status: 'error', finishedAt: Date.now() })
+      this.finish('error')
     } finally {
+      // Filet de sécurité : ferme les écritures même sur une sortie inattendue.
       this.closed = true
       this.flushEvents()
       this.flushSuppressed()

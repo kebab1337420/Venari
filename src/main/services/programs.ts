@@ -16,7 +16,10 @@ export function toProgramInput(p: ProgramOverview): ProgramInput {
     industry: p.industry ?? null,
     webLink: p.webLinks?.detail ?? null,
     following: p.following,
-    rawJson: JSON.stringify(p),
+    // On ne persiste pas le blob complet de l'API : il n'est lu par personne et
+    // finissait par dupliquer en clair, au repos, tout le detail renvoye par
+    // Intigriti. Seuls les champs ci-dessus sont stockes.
+    rawJson: null,
   }
 }
 

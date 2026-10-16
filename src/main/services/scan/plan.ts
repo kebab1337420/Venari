@@ -1,5 +1,6 @@
 import { isIP } from 'node:net'
 import type { ScanDepth, ScopeDomain } from '../../../shared/ipc'
+import { resolveWebTarget } from '../../../shared/scan-targets'
 
 export const SCAN_DEPTHS: ScanDepth[] = ['low', 'med', 'high']
 
@@ -71,17 +72,8 @@ export function selectTargets(scope: ScopeDomain[]): string[] {
   const out: string[] = []
   for (const d of scope) {
     if (!d.inScope) continue
-    const raw = d.endpoint.trim()
-    if (/^[a-z][a-z0-9+.-]*:/i.test(raw) && !/^https?:\/\//i.test(raw)) continue
-    let ep = raw
-    if (!/^https?:\/\//i.test(ep)) ep = `https://${ep}`
-    let u: URL
-    try {
-      u = new URL(ep)
-    } catch {
-      continue
-    }
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') continue
+    const u = resolveWebTarget(d.endpoint)
+    if (!u) continue
     if (isPrivateHost(u.hostname)) continue
     const norm = u.origin + u.pathname.replace(/\/+$/, '')
     if (seen.has(norm)) continue
@@ -96,15 +88,8 @@ export function inScopeHosts(scope: ScopeDomain[]): string[] {
   const hosts = new Set<string>()
   for (const d of scope) {
     if (!d.inScope) continue
-    const raw = d.endpoint.trim()
-    if (/^[a-z][a-z0-9+.-]*:/i.test(raw) && !/^https?:\/\//i.test(raw)) continue
-    const ep = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
-    let u: URL
-    try {
-      u = new URL(ep)
-    } catch {
-      continue
-    }
+    const u = resolveWebTarget(d.endpoint)
+    if (!u) continue
     const host = u.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '').replace(/^\*\./, '')
     if (host) hosts.add(host)
   }

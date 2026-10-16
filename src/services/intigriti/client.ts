@@ -73,15 +73,15 @@ export class IntigritiClient {
   }
 
   getProgram(programId: string): Promise<ProgramDetail> {
-    return this.request(`/v1/programs/${programId}`, {}, programDetailSchema)
+    return this.request(`/v1/programs/${encodeURIComponent(programId)}`, {}, programDetailSchema)
   }
 
   getProgramDomains(programId: string, versionId: string): Promise<ProgramDomains> {
-    return this.request(`/v1/programs/${programId}/domains/${versionId}`, {}, programDomainsSchema)
+    return this.request(`/v1/programs/${encodeURIComponent(programId)}/domains/${encodeURIComponent(versionId)}`, {}, programDomainsSchema)
   }
 
   getProgramRules(programId: string, versionId: string): Promise<ProgramRules> {
-    return this.request(`/v1/programs/${programId}/rules-of-engagements/${versionId}`, {}, programRulesSchema)
+    return this.request(`/v1/programs/${encodeURIComponent(programId)}/rules-of-engagements/${encodeURIComponent(versionId)}`, {}, programRulesSchema)
   }
 
   listActivities(params: { createdSince?: number; following?: boolean; limit?: number; offset?: number } = {}): Promise<Page<ProgramActivity>> {

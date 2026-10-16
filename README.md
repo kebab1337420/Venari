@@ -27,7 +27,7 @@ Autres prérequis communs :
 | Plateforme | Artefact | Contenu |
 | --- | --- | --- |
 | Windows | `dist/Venari-Setup-<version>.exe` (NSIS) | dossier d'installation au choix, raccourcis bureau et menu démarrer, désinstallation propre |
-| Linux | `dist/venari-<version>.AppImage` | auto-portable : `chmod +x` puis lancer, aucun privilège requis |
+| Linux | `dist/Venari-<version>.AppImage` | auto-portable : `chmod +x` puis lancer, aucun privilège requis |
 | Linux | `dist/venari_<version>_amd64.deb` | installation native via `apt install ./venari_<version>_amd64.deb` |
 
 `<version>` est la version déclarée dans `package.json`.

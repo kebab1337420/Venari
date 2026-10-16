@@ -3,7 +3,6 @@ import {
   ApiError,
   AuthError,
   BountyDeskError,
-  HttpError,
   NetworkError,
   RateLimitError,
   RetryableError,
@@ -17,7 +16,6 @@ describe('hierarchie des erreurs', () => {
     expect(new AuthError('x').name).toBe('AuthError')
     expect(new RateLimitError().name).toBe('RateLimitError')
     expect(new RetryableError(500, 'x').name).toBe('RetryableError')
-    expect(new HttpError(500, 'x').name).toBe('HttpError')
     expect(new NetworkError('x').name).toBe('NetworkError')
   })
 
@@ -58,10 +56,9 @@ describe('RateLimitError', () => {
 })
 
 describe('erreurs portant un statut', () => {
-  it('expose le statut de RetryableError et HttpError', () => {
+  it('expose le statut de RetryableError', () => {
     expect(new RetryableError(503, 'indisponible').status).toBe(503)
-    expect(new HttpError(418, 'théière').status).toBe(418)
-    expect(new HttpError(418, 'théière').message).toBe('théière')
+    expect(new RetryableError(503, 'indisponible').message).toBe('indisponible')
   })
 })
 
@@ -72,9 +69,8 @@ describe('isRetryable', () => {
     expect(isRetryable(new NetworkError('x'))).toBe(true)
   })
 
-  it('ne reessaie ni les refus d\'authentification ni les erreurs HTTP definitives', () => {
+  it('ne reessaie ni les refus d\'authentification ni les erreurs definitives', () => {
     expect(isRetryable(new AuthError('x'))).toBe(false)
-    expect(isRetryable(new HttpError(400, 'x'))).toBe(false)
     expect(isRetryable(new ApiError('x'))).toBe(false)
     expect(isRetryable(new Error('x'))).toBe(false)
   })

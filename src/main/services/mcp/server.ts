@@ -247,7 +247,7 @@ function computeCvssBase(raw: string): CvssComputation {
 
 const PAGE_TIMEOUT_MS = 15_000
 const PAGE_MAX_REDIRECTS = 5
-const PAGE_USER_AGENT = 'Venari/0.1 (lecteur de page pour agent IA, GET seul)'
+const PAGE_USER_AGENT = `Venari/${pkg.version} (lecteur de page pour agent IA, GET seul)`
 
 const HTML_ENTITIES: Record<string, string> = {
   nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'", '#x27': "'",
@@ -1230,17 +1230,22 @@ const TOOL_DEFS: McpToolDef[] = [
       // (SSRF), puis on borne le débit pour ne pas violer les ROE ni saturer la cible.
       const refusal = await ssrfRefusal(u)
       if (refusal) return { text: refusal, isError: true }
-      await httpRequestThrottle.acquire()
       const maxBytes = args.maxBytes === undefined ? 1_048_576 : asInt(args.maxBytes, 1024, 2_097_152)
       if (maxBytes === null) return { text: 'maxBytes doit être un entier entre 1024 et 2097152', isError: true }
       const timeoutMs = args.timeoutMs === undefined ? 20_000 : asInt(args.timeoutMs, 1000, 60_000)
       if (timeoutMs === null) return { text: 'timeoutMs doit être un entier entre 1000 et 60000', isError: true }
 
+      // En-tetes construits AVANT de consommer un jeton de debit : un nom
+      // d'en-tete invalide doit renvoyer une erreur claire sans penaliser le quota.
       const headers = new Headers()
       if (args.headers && typeof args.headers === 'object' && !Array.isArray(args.headers)) {
-        for (const [k, v] of Object.entries(args.headers as Record<string, unknown>)) {
-          if (typeof v === 'string') headers.set(k, v.slice(0, 2000))
-          else if (typeof v === 'number') headers.set(k, String(v))
+        try {
+          for (const [k, v] of Object.entries(args.headers as Record<string, unknown>)) {
+            if (typeof v === 'string') headers.set(k, v.slice(0, 2000))
+            else if (typeof v === 'number') headers.set(k, String(v))
+          }
+        } catch (err) {
+          return { text: `En-tête invalide : ${err instanceof Error ? err.message : String(err)}`, isError: true }
         }
       }
       let body: string | undefined
@@ -1250,6 +1255,10 @@ const TOOL_DEFS: McpToolDef[] = [
         }
         body = args.body.slice(0, 100_000)
       }
+
+      // Valide d'abord, borne le debit ensuite : une requete malformee ne doit
+      // pas consommer le quota ni retarder un appel legitime.
+      await httpRequestThrottle.acquire()
 
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -1798,7 +1807,15 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       const name = typeof params.name === 'string' ? params.name : ''
       const toolArgs = params.arguments && typeof params.arguments === 'object' ? (params.arguments as ToolArgs) : {}
       const start = Date.now()
-      const result = await callTool(name, toolArgs)
+      let result: ToolResult
+      try {
+        result = await callTool(name, toolArgs)
+      } catch (err) {
+        // Un handler qui jette ne doit pas se transformer en 500 muet : on le
+        // remonte comme resultat d'outil en erreur (visible par le client MCP)
+        // pour conserver la ligne d'audit et un message exploitable.
+        result = { text: err instanceof Error ? err.message : String(err), isError: true }
+      }
       const ms = Date.now() - start
       audit(clientLabel, name || '«tool manquant»', toolArgs, result.isError === true ? 'error' : 'ok', ms, remoteIp)
       sendRpcResult(res, id, { content: [{ type: 'text', text: result.text }], isError: result.isError === true })

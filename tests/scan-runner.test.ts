@@ -130,6 +130,32 @@ describe('ScanRunner - plafond d evenements', () => {
     expect(messages.filter((m) => m.startsWith('ligne ')).length).toBeLessThanOrEqual(5)
     expect(messages.some((m) => m.includes('Flux tronqué'))).toBe(true)
   }, 40_000)
+
+  it('ecrit l avis de troncature avant la mise a jour du statut', async () => {
+    const scanId = newScan()
+    const repo = getRepository()
+    const order: string[] = []
+    const origAppend = repo.appendScanEvent.bind(repo)
+    const origUpdate = repo.updateScan.bind(repo)
+    vi.spyOn(repo, 'appendScanEvent').mockImplementation((id, seq, level, message, ts) => {
+      origAppend(id, seq, level, message, ts)
+      if (message.includes('Flux tronqué')) order.push('truncation')
+    })
+    vi.spyOn(repo, 'updateScan').mockImplementation((id, patch) => {
+      origUpdate(id, patch)
+      if (patch.status) order.push(`status:${patch.status}`)
+    })
+
+    const runner = new ScanRunner(scanId, { stepTimeoutMs: 20_000, maxEvents: 5 })
+    const script = 'for (let i = 0; i < 200; i++) console.log("ligne " + i)'
+    await runner.run(plan([{ tool: 'node', args: ['-e', script] }]))
+
+    // Le renderer cesse de poller des qu'il voit un statut final : un avis de
+    // troncature ecrit apres (dans le finally) ne serait jamais affiche a
+    // l'ecran. Il doit donc preceder la mise a jour du statut.
+    expect(order).toEqual(['truncation', 'status:done'])
+    expect(scanStatus(scanId)).toBe('done')
+  }, 40_000)
 })
 
 describe('ScanRunner - arret de la descendance', () => {

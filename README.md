@@ -27,7 +27,7 @@ Autres prérequis communs :
 | Plateforme | Artefact | Contenu |
 | --- | --- | --- |
 | Windows | `dist/Venari-Setup-<version>.exe` (NSIS) | dossier d'installation au choix, raccourcis bureau et menu démarrer, désinstallation propre |
-| Linux | `dist/venari-<version>.AppImage` | auto-portable : `chmod +x` puis lancer, aucun privilège requis |
+| Linux | `dist/Venari-<version>.AppImage` | auto-portable : `chmod +x` puis lancer, aucun privilège requis |
 | Linux | `dist/venari_<version>_amd64.deb` | installation native via `apt install ./venari_<version>_amd64.deb` |
 
 `<version>` est la version déclarée dans `package.json`.
@@ -74,15 +74,6 @@ node node_modules/electron/install.js
 
 Le typecheck suit la même ligne : `tsconfig.node.json` exclut les `*.tsx` (pas de JSX ni de DOM côté main), `tsconfig.web.json` les inclut. Comme Vitest tourne sans globales, l'auto-nettoyage de Testing Library ne s'active pas : chaque fichier TSX appelle `afterEach(cleanup)`.
 
-### Tests
-
-`npm run test` exécute tout le dossier `tests/` avec Vitest, en deux environnements :
-
-- `tests/*.test.ts` → `node` (main, preload, services, outils) ;
-- `tests/*.test.tsx` → **jsdom**, pour les composants React du renderer. Chaque fichier porte `// @vitest-environment jsdom` en première ligne et mock le pont preload via `vi.mock('../src/renderer/src/api')` : seul le mappage état → rendu est testé, l'IPC réel reste couvert par les tests de `src/main`.
-
-Le typecheck suit la même ligne : `tsconfig.node.json` exclut les `*.tsx` (pas de JSX ni de DOM côté main), `tsconfig.web.json` les inclut. Comme Vitest tourne sans globales, l'auto-nettoyage de Testing Library ne s'active pas : chaque fichier TSX appelle `afterEach(cleanup)`.
-
 ### Boîte (CLI d'agents)
 
 `boite` est une boîte à lettres locale pour coordonner des agents (IA ou humains), sans réseau ni politesse : uniquement des tâches et des ressources partagées. Les données vivent dans `~/.boite/boite.db` (surcharge avec `BOITE_DIR`), et les adresses ont la forme `thread-id` (machine locale) ou `machine/thread-id`.
@@ -103,12 +94,13 @@ Codes de sortie : `0` ok, `2` usage, `3` refus (courtoisie/archivé/ready), `4` 
 
 ### Intégration continue
 
-`.github/workflows/ci.yml` s'exécute à chaque push sur `main` et à chaque pull request, sur 6 jobs :
+`.github/workflows/ci.yml` s'exécute à chaque push sur `main`, à chaque pull request et à chaque tag `v*`, sur 7 jobs :
 
 | Job | Ce qu'il prouve |
 |---|---|
 | `verify` (Windows + Linux) | `npm run pack:check` passe sur les deux plateformes |
 | `package` (Windows + Linux) | l'installeur NSIS, l'AppImage et le deb se construisent vraiment |
+| `release` (tag `v*`) | la release GitHub est créée et les artefacts (NSIS, blockmap, AppImage, deb, `latest*.yml`) y sont attachés |
 | `agent` | l'agent Rust compile et passe son test de bout en bout (Windows) |
 | `agent-windows-only` | le build de l'agent **échoue** hors Windows, avec le message explicite attendu |
 | `smoke-linux` | l'AppImage se lance et son processus tient 30 s |
@@ -142,7 +134,7 @@ Le catalogue compte **144 entrées** réparties en six catégories (`recon` 65, 
 
 | Source | Nb | Installation |
 | --- | --- | --- |
-| `winget` | 24 | `winget install` (Windows) ; sous Linux, détection d'abord, puis `apt` via `pkexec` quand un paquet Debian est connu |
+| `winget` | 23 | `winget install` (Windows) ; sous Linux, détection d'abord, puis `apt` via `pkexec` quand un paquet Debian est connu |
 | `github` | 43 | asset de release téléchargé, extrait, rendu exécutable, copié dans le dossier outils |
 | `git` | 69 | `git clone` sécurisé (frameworks, wordlists, outils Python/Go) — un bouton **Guide** ouvre la doc, rien n'est compilé ni exécuté automatiquement |
 | `go` | 5 | `go install <module>@latest` avec `GOBIN` dirigé vers le dossier de l'outil |
@@ -158,7 +150,7 @@ Détails qui comptent :
 
 - **Détection d'abord** : avant toute installation, Venari cherche le binaire dans le `PATH` (via le champ `detectCmd`). Installer un outil déjà présent est sans effet, et les noms diffèrent entre plateformes (`ripgrep`→`rg`, `bat`→`batcat`, `fd`→`fdfind`, `wireshark`→`tshark`, `powershell`→`pwsh`…).
 - **Portables multi-plateformes** : pour chaque binaire GitHub, l'asset de release est choisi en fonction de la plateforme hôte (nom du binaire sans extension sous Linux, suffixe `.exe` sous Windows, `chmod +x` à l'installation). Un asset ambigu ou absent produit une erreur explicite, jamais un faux « installé ».
-- **Outils signalés non disponibles** : 23 entrées sont marquées Windows-only (Sysinternals, PowerToys, Windows Terminal…) et 29 sont des applications graphiques ; l'app refuse de tenter une installation qui n'a pas de sens sur la plateforme, avec une explication.
+- **Outils signalés non disponibles** : 2 entrées sont marquées Windows-only (chisel, Fiddler Classic) et 4 sont des applications graphiques (Burp Suite, Postman, Insomnia, Bruno) ; l'app refuse de tenter une installation qui n'a pas de sens sur la plateforme, avec une explication.
 - **Token GitHub optionnel** (écran Outils) : les downloads passent par l'API GitHub, qui est limitée à 60 requêtes/heure sans authentification. Le token est chiffré au repos.
 
 ### MCP (IA)

@@ -14,12 +14,29 @@ import {
 const programIdSchema = z.string().min(1).max(200)
 const credentialIdSchema = z.number().int().positive()
 
+const labelSchema = z.string().trim().min(1).max(200)
+const usernameSchema = z.string().max(1000)
+const secretSchema = z.string().max(10000)
+const noteSchema = z.string().max(5000)
+
 const credentialInputSchema = z.object({
   programId: programIdSchema,
-  label: z.string().trim().min(1).max(200),
-  username: z.string().max(1000).default(''),
-  secret: z.string().max(10000).default(''),
-  note: z.string().max(5000).default(''),
+  label: labelSchema,
+  username: usernameSchema.default(''),
+  secret: secretSchema.default(''),
+  note: noteSchema.default(''),
+})
+
+// Patch volontairement SANS `.default('')` : un champ omis doit rester `undefined`
+// (donc inchangé en base). `credentialInputSchema.partial()` appliquait quand même les
+// défauts et écrasait username/note par '' lors d'une mise à jour partielle, alors que
+// le service protège déjà explicitement `secret` sur ce même principe (un champ omis
+// ne doit jamais écraser la valeur stockée).
+const credentialPatchSchema = z.object({
+  label: labelSchema.optional(),
+  username: usernameSchema.optional(),
+  secret: secretSchema.optional(),
+  note: noteSchema.optional(),
 })
 
 const dbResultError = (err: unknown): { ok: false; error: string } => ({
@@ -83,7 +100,7 @@ export function registerDetailIpc(): void {
       const { id, patch } = z
         .object({
           id: credentialIdSchema,
-          patch: credentialInputSchema.partial().omit({ programId: true }),
+          patch: credentialPatchSchema,
         })
         .parse(raw)
       updateCredentialPatch(id, patch)

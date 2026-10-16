@@ -361,8 +361,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.McpTokenAdd, async (_event, raw: unknown): Promise<McpTokenAddResult> => {
-    const { label } = z.object({ label: z.string().trim().min(1).max(60) }).parse(raw)
     try {
+      const { label } = z.object({ label: z.string().trim().min(1).max(60) }).parse(raw)
       const cfg = loadMcpConfig()
       const newId = generateMcpTokenId()
       const token = generateMcpToken()
@@ -376,8 +376,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.McpTokenRevoke, async (_event, raw: unknown): Promise<McpTokenRevokeResult> => {
-    const { id } = z.object({ id: z.string().min(1).max(100) }).parse(raw)
     try {
+      const { id } = z.object({ id: z.string().min(1).max(100) }).parse(raw)
       const cfg = loadMcpConfig()
       if (cfg.tokens.length <= 1) {
         return { ok: false as const, error: 'Au moins un jeton est requis : révoquer ce jeton couperait tous les clients.' }
@@ -395,14 +395,14 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.McpSetEnabled, async (_event, raw: unknown): Promise<McpSetEnabledResult> => {
-    const { enabled, port, lan } = z
-      .object({
-        enabled: z.boolean(),
-        port: z.number().int().min(1024).max(65535).nullable().optional(),
-        lan: z.boolean().optional(),
-      })
-      .parse(raw)
     try {
+      const { enabled, port, lan } = z
+        .object({
+          enabled: z.boolean(),
+          port: z.number().int().min(1024).max(65535).nullable().optional(),
+          lan: z.boolean().optional(),
+        })
+        .parse(raw)
       const cfg = loadMcpConfig()
       if (enabled) {
         if (cfg.tokens.length === 0) {
@@ -442,8 +442,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.McpRequests, (_event, raw: unknown): McpRequestsResult => {
-    const { limit } = z.object({ limit: z.number().int().min(1).max(500).optional() }).parse(raw)
     try {
+      const { limit } = z.object({ limit: z.number().int().min(1).max(500).optional() }).parse(raw)
       const rows = getRepository()
         .listMcpRequests(limit ?? 100)
         .map((r) => ({
@@ -506,8 +506,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.McpMachines, (_event, raw: unknown): McpMachinesResult => {
-    const { limit } = z.object({ limit: z.number().int().min(1).max(200).optional() }).parse(raw)
     try {
+      const { limit } = z.object({ limit: z.number().int().min(1).max(200).optional() }).parse(raw)
       const machines = getRepository()
         .mcpMachines(limit ?? 50)
         .map((m) => ({
@@ -573,8 +573,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.AgentTokenAdd, async (_event, raw: unknown): Promise<AgentTokenAddResult> => {
-    const { label } = z.object({ label: z.string().trim().min(1).max(60) }).parse(raw)
     try {
+      const { label } = z.object({ label: z.string().trim().min(1).max(60) }).parse(raw)
       const cfg = loadMcpConfig()
       const newId = generateMcpTokenId()
       const token = generateMcpToken()
@@ -596,8 +596,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.AgentTokenRevoke, async (_event, raw: unknown): Promise<AgentTokenRevokeResult> => {
-    const { id } = z.object({ id: z.string().min(1).max(100) }).parse(raw)
     try {
+      const { id } = z.object({ id: z.string().min(1).max(100) }).parse(raw)
       const cfg = loadMcpConfig()
       const agents = cfg.agents.filter((t) => t.id !== id)
       if (agents.length === cfg.agents.length) {
@@ -634,8 +634,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.AgentSessionRequest, (_event, raw: unknown): AgentSessionRequestResult => {
-    const { tokenId } = z.object({ tokenId: z.string().min(1).max(100) }).parse(raw)
     try {
+      const { tokenId } = z.object({ tokenId: z.string().min(1).max(100) }).parse(raw)
       const r = requestSession(tokenId)
       if ('row' in r) {
         const row = r.row
@@ -659,8 +659,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.AgentSessionDecide, async (_event, raw: unknown): Promise<AgentSessionDecideResult> => {
-    const { sessionId, approve } = z.object({ sessionId: z.number().int().min(1), approve: z.boolean() }).parse(raw)
     try {
+      const { sessionId, approve } = z.object({ sessionId: z.number().int().min(1), approve: z.boolean() }).parse(raw)
       const r = decideSession(sessionId, approve)
       if (!r.ok) return r
       if (approve && r.viewToken) {
@@ -680,13 +680,13 @@ export function registerMcpIpc(): void {
   // Copie un secret dans le presse-papier. Le renderer choisit *quel* secret,
   // jamais son contenu : il ne voit que le masque renvoye par les autres canaux.
   ipcMain.handle(IPC.SecretCopy, async (_event, raw: unknown): Promise<SecretCopyResult> => {
-    const { kind, id } = z
-      .object({
-        kind: z.enum(['mcpToken', 'agentToken', 'mcpConfig', 'agentConfig']),
-        id: z.string().min(1).max(100).optional(),
-      })
-      .parse(raw)
     try {
+      const { kind, id } = z
+        .object({
+          kind: z.enum(['mcpToken', 'agentToken', 'mcpConfig', 'agentConfig']),
+          id: z.string().min(1).max(100).optional(),
+        })
+        .parse(raw)
       const cfg = loadMcpConfig()
       const info = getMcpStatus()
       const primary = cfg.tokens[0]?.token
@@ -717,8 +717,8 @@ export function registerMcpIpc(): void {
   })
 
   ipcMain.handle(IPC.AgentSessionEnd, (_event, raw: unknown): DbResult => {
-    const { viewToken } = z.object({ viewToken: z.string().min(1).max(200) }).parse(raw)
     try {
+      const { viewToken } = z.object({ viewToken: z.string().min(1).max(200) }).parse(raw)
       endSessionByViewToken(viewToken)
       return { ok: true }
     } catch (err) {

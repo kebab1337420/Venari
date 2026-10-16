@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { app } from 'electron'
+import pkg from '../../../../package.json'
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, delimiter, join } from 'node:path'
 import type { ToolEntry } from '../../../shared/ipc'
@@ -429,8 +430,9 @@ export async function currentTools(): Promise<ToolEntry[]> {
 
 function githubHeaders(): Record<string, string> {
   const token = process.env.GITHUB_TOKEN ?? loadGithubToken()
-  if (!token) return { 'User-Agent': 'Venari/0.1' }
-  return { 'User-Agent': 'Venari/0.1', Authorization: `Bearer ${token}` }
+  const userAgent = `Venari/${pkg.version}`
+  if (!token) return { 'User-Agent': userAgent }
+  return { 'User-Agent': userAgent, Authorization: `Bearer ${token}` }
 }
 
 /**

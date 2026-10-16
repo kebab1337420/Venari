@@ -185,11 +185,4 @@ export function registerBrowserIpc(): void {
   ipcMain.handle(IPC.BrowserOpen, async (_e, targetUrl?: string) => {
     return openBrowserWindow(typeof targetUrl === 'string' ? targetUrl : undefined)
   })
-
-  ipcMain.handle(IPC.BrowserClose, async () => {
-    if (browserWindow && !browserWindow.isDestroyed()) {
-      browserWindow.close()
-    }
-    return { ok: true }
-  })
 }

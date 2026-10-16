@@ -26,7 +26,6 @@ export const IPC = {
   CredentialsReveal: 'credentials:reveal',
   OpenExternal: 'shell:openExternal',
   BrowserOpen: 'browser:open',
-  BrowserClose: 'browser:close',
   ScanStart: 'scan:start',
   ScanList: 'scan:list',
   ScanEvents: 'scan:events',
@@ -422,7 +421,6 @@ export interface BountyDeskBridge {
   shell: {
     openExternal(url: string): Promise<OpenExternalResult>
     openBrowser(url?: string): Promise<{ ok: boolean; error?: string }>
-    closeBrowser(): Promise<{ ok: boolean; error?: string }>
   }
   scans: {
     start(programId: string, opts: { depth: ScanDepth; roeConfirm: boolean; rateLimit?: number }): Promise<ScanStartResult>

@@ -24,7 +24,6 @@ vi.mock('electron', () => ({
 }))
 
 import {
-  clearGithubToken,
   clearToken,
   loadGithubToken,
   loadMcpConfig,

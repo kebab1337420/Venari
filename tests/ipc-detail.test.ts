@@ -1,4 +1,4 @@
-import { beforeEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { IPC } from '../src/shared/ipc'
 import type { ProgramDetailData } from '../src/shared/ipc'
 
@@ -65,6 +65,8 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(0))
   h.openExternal.mockImplementation(async () => undefined)
   h.client.getToken.mockImplementation(() => 'tok')
   h.fetchProgramDetail.mockImplementation(async () => detail())
@@ -74,6 +76,10 @@ beforeEach(() => {
   h.removeCredential.mockImplementation(() => undefined)
   h.revealCredentialSecret.mockImplementation(() => 'secret')
   h.updateCredentialPatch.mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('ProgramDetailGet', () => {

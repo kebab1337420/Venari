@@ -26,7 +26,6 @@ const bridge: BountyDeskBridge = {
   shell: {
     openExternal: (url: string) => ipcRenderer.invoke(IPC.OpenExternal, url),
     openBrowser: (url?: string) => ipcRenderer.invoke(IPC.BrowserOpen, url),
-    closeBrowser: () => ipcRenderer.invoke(IPC.BrowserClose),
   },
   scans: {
     start: (programId: string, opts) => ipcRenderer.invoke(IPC.ScanStart, { programId, ...opts }),

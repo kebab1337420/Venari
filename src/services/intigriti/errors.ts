@@ -21,12 +21,6 @@ export class RetryableError extends ApiError {
   }
 }
 
-export class HttpError extends ApiError {
-  constructor(readonly status: number, message: string) {
-    super(message)
-  }
-}
-
 export class NetworkError extends BountyDeskError {}
 
 export function isRetryable(error: unknown): boolean {

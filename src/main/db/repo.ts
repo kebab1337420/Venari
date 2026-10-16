@@ -335,7 +335,12 @@ export class Repository {
     const dir = q.dir === 'desc' ? 'DESC' : 'ASC'
     switch (sort) {
       case 'bounty':
-        return `ORDER BY CASE WHEN p.max_bounty_value IS NULL THEN 1 ELSE 0 END, p.max_bounty_value ${dir}, p.name COLLATE NOCASE ASC`
+        // Même raison que « recent » : sans dernier critère, deux programmes
+        // portant la même prime ET le même nom (courant avec des primes
+        // absentes, toutes groupées) ne sont pas dans un ordre total, et la
+        // pagination OFFSET saute ou répète des lignes. Les primes absentes
+        // restent en fin de liste dans les deux sens.
+        return `ORDER BY CASE WHEN p.max_bounty_value IS NULL THEN 1 ELSE 0 END, p.max_bounty_value ${dir}, p.name COLLATE NOCASE ASC, p.id ASC`
       case 'recent':
         // L'ordre doit être total : sans second critère, deux programmes mis à
         // jour à la même milliseconde (une synchro en écrit des centaines en une

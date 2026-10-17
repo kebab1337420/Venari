@@ -1,11 +1,13 @@
 import { EventEmitter } from 'node:events'
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // userData unique : toolsDir() doit retourner le même dossier à chaque appel.
+// Le suffixe aleatoire evite qu'un run reutilisant le meme pid ne relise un
+// dossier laisse par un run precedent (binaire fff.exe residuel).
 const root = vi.hoisted(() => ({
-  dir: `${process.env.TEMP ?? '/tmp'}/bountydesk-go-test-${process.pid}`
+  dir: `${process.env.TEMP ?? '/tmp'}/bountydesk-go-test-${process.pid}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }))
 
 vi.mock('electron', () => ({
@@ -77,6 +79,19 @@ import { getTool } from '../src/main/services/tools/catalog'
 const exeName = (): string => (process.platform === 'win32' ? 'fff.exe' : 'fff')
 
 describe('source go (go install en GOBIN isolé)', () => {
+  beforeEach(() => {
+    // Etat du faux child_process remis a zero entre tests : sans cela un test
+    // qui laisse `hang` arme ou un binaire residuel fausse le suivant.
+    fake.mode = 'ok'
+    fake.hang = false
+    fake.held = null
+    fake.spawns.length = 0
+  })
+
+  afterAll(() => {
+    rmSync(root.dir, { recursive: true, force: true })
+  })
+
   it('le catalogue déclare les outils Go avec un module', () => {
     for (const id of ['fff', 'hakrawler', 'haktrails', 'gospider', 'gauplus']) {
       const tool = getTool(id)

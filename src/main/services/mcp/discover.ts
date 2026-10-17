@@ -15,31 +15,49 @@ let socket: Socket | null = null
  * Aucun secret ne circule : la reponse ne contient que le pairId (identifiant
  * public du processus), l'hote, le port et le fait qu'un appairage est possible.
  */
-export function startDiscoveryResponder(payload: () => Record<string, unknown>, port = DISCOVERY_PORT): void {
+export function startDiscoveryResponder(
+  payload: () => Record<string, unknown>,
+  port = DISCOVERY_PORT
+): Promise<number> {
   stopDiscoveryResponder()
-  const sock = createSocket({ type: 'udp4', reuseAddr: true })
-  // Une erreur (port pris, multicast indisponible) desactive la reponse : la
-  // decouverte est un confort, jamais une condition de fonctionnement du MCP.
-  sock.on('error', () => stopDiscoveryResponder())
-  sock.on('message', (msg: Buffer, rinfo: { address: string; port: number }) => {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(msg.toString('utf8'))
-    } catch {
-      return
+  return new Promise<number>((resolve) => {
+    let settled = false
+    // Resout le port reellement lie : les tests demandent un port ephemere (0)
+    // pour ne pas se disputer le port fixe de decouverte, puis sondent celui-ci.
+    const settle = (boundPort: number): void => {
+      if (settled) return
+      settled = true
+      resolve(boundPort)
     }
-    if ((parsed as { probe?: unknown } | null)?.probe !== DISCOVERY_PROBE) return
-    const reply = Buffer.from(JSON.stringify(payload()))
-    sock.send(reply, rinfo.port, rinfo.address, () => {})
+    const sock = createSocket({ type: 'udp4', reuseAddr: true })
+    socket = sock
+    // Une erreur (port pris, multicast indisponible) desactive la reponse : la
+    // decouverte est un confort, jamais une condition de fonctionnement du MCP.
+    sock.on('error', () => {
+      stopDiscoveryResponder()
+      settle(port)
+    })
+    sock.on('message', (msg: Buffer, rinfo: { address: string; port: number }) => {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(msg.toString('utf8'))
+      } catch {
+        return
+      }
+      if ((parsed as { probe?: unknown } | null)?.probe !== DISCOVERY_PROBE) return
+      const reply = Buffer.from(JSON.stringify(payload()))
+      sock.send(reply, rinfo.port, rinfo.address, () => {})
+    })
+    sock.bind(port, () => {
+      try {
+        sock.addMembership(DISCOVERY_GROUP)
+      } catch {
+        // Interface sans multicast : la sonde loopback fonctionne toujours.
+      }
+      const addr = sock.address()
+      settle(typeof addr === 'object' && addr !== null ? addr.port : port)
+    })
   })
-  sock.bind(port, () => {
-    try {
-      sock.addMembership(DISCOVERY_GROUP)
-    } catch {
-      // Interface sans multicast : la sonde loopback fonctionne toujours.
-    }
-  })
-  socket = sock
 }
 
 export function stopDiscoveryResponder(): void {

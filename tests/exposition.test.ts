@@ -63,32 +63,32 @@ describe('exposition reseau du serveur MCP', () => {
 
   it('refuse 0.0.0.0 sur un reseau public, meme demande explicitement', async () => {
     onlyAddresses([{ address: '203.0.113.7', family: 'IPv4', internal: false }])
-    const r = await startMcpServer(0, TOKEN, { lan: true })
+    const r = await startMcpServer(0, TOKEN, { lan: true, discoveryPort: 0 })
     expect(r.ok).toBe(true)
     expect(getMcpStatus().lan).toBe(false)
   })
 
   it('refuse 0.0.0.0 sur un reseau public sans interface du tout', async () => {
     fakeInterfaces = {}
-    await startMcpServer(0, TOKEN, { lan: true })
+    await startMcpServer(0, TOKEN, { lan: true, discoveryPort: 0 })
     expect(getMcpStatus().lan).toBe(false)
   })
 
   it('accepte 0.0.0.0 sur un reseau prive', async () => {
     onlyAddresses([{ address: '192.168.1.42', family: 'IPv4', internal: false }])
-    await startMcpServer(0, TOKEN, { lan: true })
+    await startMcpServer(0, TOKEN, { lan: true, discoveryPort: 0 })
     expect(getMcpStatus().lan).toBe(true)
   })
 
   it('accepte les trois plages privees et refuse 172.15/172.32', async () => {
     for (const address of ['10.1.2.3', '172.16.0.9', '172.31.255.254', '192.168.0.1']) {
       onlyAddresses([{ address, family: 'IPv4', internal: false }])
-      await startMcpServer(0, TOKEN, { lan: true })
+      await startMcpServer(0, TOKEN, { lan: true, discoveryPort: 0 })
       expect(getMcpStatus().lan).toBe(true)
     }
     for (const address of ['172.15.0.1', '172.32.0.1', '203.0.113.7']) {
       onlyAddresses([{ address, family: 'IPv4', internal: false }])
-      await startMcpServer(0, TOKEN, { lan: true })
+      await startMcpServer(0, TOKEN, { lan: true, discoveryPort: 0 })
       expect(getMcpStatus().lan).toBe(false)
     }
   })

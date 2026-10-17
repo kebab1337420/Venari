@@ -68,6 +68,7 @@ describe.skipIf(!agentBuilt)('agent rust (binaire réel)', () => {
     rmSync(join(userData, 'bountydesk.db-shm'), { force: true })
     getRepository()
     const r = await startMcpServer(0, TOKEN, {
+      discoveryPort: 0,
       agentTokens: [{ id: AGENT_ID, label: 'Agent Rust', token: AGENT_TOKEN }],
     })
     if (!r.ok) throw new Error(r.error)

@@ -17,7 +17,7 @@ import { activeScanCount, activeScanForProgram, killTree, startScan } from '../s
 import { getTool, TOOL_CATALOG } from '../tools/catalog'
 import { currentTools, installTool, resolveBinary, toolsDir } from '../tools/installer'
 import { attachAgentsToServer, closeAgents, configureAgents, type AgentAuthEntry } from './agents'
-import { startDiscoveryResponder, stopDiscoveryResponder } from './discover'
+import { DISCOVERY_PORT, startDiscoveryResponder, stopDiscoveryResponder } from './discover'
 import { openBrowserWindow } from '../../ipc-browser'
 // Version réelle du paquet : une constante en dur dérive dès le premier bump.
 import pkg from '../../../../package.json'
@@ -1847,8 +1847,15 @@ function closeServer(): Promise<void> {
 export async function startMcpServer(
   port: number,
   token: string,
-  opts?: { lan?: boolean; tokens?: string[]; tokenLabels?: Map<string, string>; agentTokens?: string[] | AgentAuthEntry[] }
-): Promise<{ ok: true; port: number } | { ok: false; error: string }> {
+  opts?: {
+    lan?: boolean
+    tokens?: string[]
+    tokenLabels?: Map<string, string>
+    agentTokens?: string[] | AgentAuthEntry[]
+    /** Port UDP de decouverte ; 0 = ephemere (tests). Defaut : DISCOVERY_PORT. */
+    discoveryPort?: number
+  }
+): Promise<{ ok: true; port: number; discoveryPort: number } | { ok: false; error: string }> {
   await closeServer()
   return new Promise((resolve) => {
     const tokens = opts?.tokens && opts.tokens.length > 0 ? [...opts.tokens] : [token]
@@ -1898,18 +1905,22 @@ export async function startMcpServer(
       // Identifiant public du processus, regenere a chaque demarrage : la
       // decouverte et l'appairage designent la meme instance, sans exposer de secret.
       currentPairId = randomBytes(6).toString('base64url')
-      startDiscoveryResponder(() => ({
-        app: 'Venari',
-        version: pkg.version,
-        pairId: currentPairId,
-        port: actualPort,
-        lan: currentLan,
-        hosts: localHosts(),
-        pairing: true,
-        mcp: '/mcp',
-      }))
-      configureAgents(agentEntries)
-      resolve({ ok: true, port: actualPort })
+      void startDiscoveryResponder(
+        () => ({
+          app: 'Venari',
+          version: pkg.version,
+          pairId: currentPairId,
+          port: actualPort,
+          lan: currentLan,
+          hosts: localHosts(),
+          pairing: true,
+          mcp: '/mcp',
+        }),
+        opts?.discoveryPort ?? DISCOVERY_PORT
+      ).then((discoveryPort) => {
+        configureAgents(agentEntries)
+        resolve({ ok: true, port: actualPort, discoveryPort })
+      })
     })
   })
 }

@@ -30,7 +30,7 @@ vi.mock('../src/main/services/tools/installer', () => ({
 }))
 
 import { closeDb, getRepository } from '../src/main/db'
-import { DISCOVERY_PORT, DISCOVERY_PROBE } from '../src/main/services/mcp/discover'
+import { DISCOVERY_PROBE } from '../src/main/services/mcp/discover'
 import { startMcpServer, stopMcpServer } from '../src/main/services/mcp/server'
 import { registerMcpIpc } from '../src/main/ipc-mcp'
 import { IPC } from '../src/shared/ipc'
@@ -53,6 +53,7 @@ function ipcHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
 
 const TOKEN = 'test-token-pairing-123456'
 let port = 0
+let discoveryPort = 0
 
 async function pair(code: string, overrides: RequestInit = {}): Promise<Response> {
   return fetch(`http://127.0.0.1:${port}/pair`, {
@@ -97,9 +98,9 @@ function probeDiscovery(): Promise<Record<string, unknown> | null> {
     sock.on('error', () => finish(null))
     sock.bind(0, '127.0.0.1', () => {
       const probe = Buffer.from(JSON.stringify({ probe: DISCOVERY_PROBE }))
-      sock.send(probe, DISCOVERY_PORT, '127.0.0.1', () => {})
+      sock.send(probe, discoveryPort, '127.0.0.1', () => {})
     })
-    const timer = setTimeout(() => finish(null), 2500)
+    const timer = setTimeout(() => finish(null), 5000)
   })
 }
 
@@ -118,9 +119,10 @@ describe('appairage MCP (HTTP réel)', () => {
         webLink: null, following: false, rawJson: null,
       } as ProgramInput,
     ])
-    const r = await startMcpServer(0, TOKEN)
+    const r = await startMcpServer(0, TOKEN, { discoveryPort: 0 })
     if (!r.ok) throw new Error(r.error)
     port = r.port
+    discoveryPort = r.discoveryPort
   })
 
   afterEach(() => {

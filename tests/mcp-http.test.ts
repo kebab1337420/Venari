@@ -116,7 +116,7 @@ async function startTestServer(
 ): Promise<void> {
   let lastError = 'aucun port de test disponible'
   for (let attempt = 0; attempt < 25; attempt++) {
-    const r = await startMcpServer(randomSafePort(), token, opts)
+    const r = await startMcpServer(randomSafePort(), token, { discoveryPort: 0, ...opts })
     if (r.ok) {
       port = r.port
       return

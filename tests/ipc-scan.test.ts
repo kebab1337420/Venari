@@ -188,8 +188,10 @@ describe('ScanStart (gardes du lancement de scan)', () => {
     expect(hoisted.repo.createScan).toHaveBeenCalledWith(expect.objectContaining({ rateLimit: 12 }))
   })
 
-  it('rejette une charge invalide (profondeur inconnue)', async () => {
-    await expect(call(IPC.ScanStart, startPayload({ depth: 'ultra' }))).rejects.toThrow()
+  it('renvoie une erreur sur une charge invalide (profondeur inconnue)', async () => {
+    const res = await call(IPC.ScanStart, startPayload({ depth: 'ultra' }))
+    expect(res).toMatchObject({ ok: false })
+    expect(hoisted.repo.createScan).not.toHaveBeenCalled()
   })
 })
 

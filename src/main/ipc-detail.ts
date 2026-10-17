@@ -46,9 +46,9 @@ const dbResultError = (err: unknown): { ok: false; error: string } => ({
 
 export function registerDetailIpc(): void {
   ipcMain.handle(IPC.ProgramDetailGet, async (_event, rawId) => {
-    const programId = programIdSchema.parse(rawId)
     const client = getClient()
     try {
+      const programId = programIdSchema.parse(rawId)
       if (client.getToken()) {
         return { ok: true, detail: await fetchProgramDetail(client, programId) } as const
       }
@@ -61,8 +61,8 @@ export function registerDetailIpc(): void {
   })
 
   ipcMain.handle(IPC.CredentialsList, (_event, rawId) => {
-    const programId = programIdSchema.parse(rawId)
     try {
+      const programId = programIdSchema.parse(rawId)
       return { ok: true, credentials: listCredentials(programId) } as const
     } catch (err) {
       return dbResultError(err)
@@ -71,8 +71,8 @@ export function registerDetailIpc(): void {
 
   // Le secret n'est renvoye que pour la ligne que l'utilisateur a choisi de reveler.
   ipcMain.handle(IPC.CredentialsReveal, (_event, rawId) => {
-    const id = z.number().int().min(1).parse(rawId)
     try {
+      const id = z.number().int().min(1).parse(rawId)
       const secret = revealCredentialSecret(id)
       if (secret === null) {
         return {
@@ -87,8 +87,8 @@ export function registerDetailIpc(): void {
   })
 
   ipcMain.handle(IPC.CredentialsAdd, (_event, raw) => {
-    const input = credentialInputSchema.parse(raw)
     try {
+      const input = credentialInputSchema.parse(raw)
       return { ok: true, id: addCredential(input) } as const
     } catch (err) {
       return dbResultError(err)
@@ -96,13 +96,13 @@ export function registerDetailIpc(): void {
   })
 
   ipcMain.handle(IPC.CredentialsUpdate, (_event, raw) => {
-    const { id, patch } = z
-      .object({
-        id: credentialIdSchema,
-        patch: credentialPatchSchema,
-      })
-      .parse(raw)
     try {
+      const { id, patch } = z
+        .object({
+          id: credentialIdSchema,
+          patch: credentialPatchSchema,
+        })
+        .parse(raw)
       updateCredentialPatch(id, patch)
       return { ok: true } as const
     } catch (err) {
@@ -111,8 +111,8 @@ export function registerDetailIpc(): void {
   })
 
   ipcMain.handle(IPC.CredentialsRemove, (_event, rawId) => {
-    const id = credentialIdSchema.parse(rawId)
     try {
+      const id = credentialIdSchema.parse(rawId)
       removeCredential(id)
       return { ok: true } as const
     } catch (err) {
@@ -121,8 +121,8 @@ export function registerDetailIpc(): void {
   })
 
   ipcMain.handle(IPC.OpenExternal, async (_event, rawUrl) => {
-    const url = z.string().url().parse(rawUrl)
     try {
+      const url = z.string().url().parse(rawUrl)
       const u = new URL(url)
       if (u.protocol !== 'https:' && u.protocol !== 'http:') {
         return { ok: false, error: 'Protocole non autorisé' } as const

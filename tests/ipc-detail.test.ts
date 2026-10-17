@@ -111,8 +111,9 @@ describe('ProgramDetailGet', () => {
     expect(result).toEqual({ ok: false, error: 'boom' })
   })
 
-  it('rejette un identifiant de programme invalide', async () => {
-    await expect(call(IPC.ProgramDetailGet, '')).rejects.toThrow()
+  it('renvoie une erreur sur un identifiant de programme invalide', async () => {
+    const result = await call(IPC.ProgramDetailGet, '')
+    expect(result).toMatchObject({ ok: false })
   })
 })
 
@@ -149,8 +150,9 @@ describe('Credentials', () => {
     })
   })
 
-  it('rejette un libellé vide', () => {
-    expect(() => call(IPC.CredentialsAdd, { programId: 'p1', label: '   ' })).toThrow()
+  it('refuse un libellé vide', () => {
+    const result = call(IPC.CredentialsAdd, { programId: 'p1', label: '   ' })
+    expect(result).toMatchObject({ ok: false })
   })
 
   it('met à jour partiellement et ignore programId', () => {
@@ -190,7 +192,8 @@ describe('OpenExternal', () => {
     expect(h.openExternal).not.toHaveBeenCalled()
   })
 
-  it('rejette une chaîne qui n’est pas une URL', async () => {
-    await expect(call(IPC.OpenExternal, 'pas une url')).rejects.toThrow()
+  it('signale une chaîne qui n’est pas une URL', async () => {
+    const result = await call(IPC.OpenExternal, 'pas une url')
+    expect(result).toMatchObject({ ok: false })
   })
 })

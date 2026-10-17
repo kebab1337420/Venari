@@ -21,20 +21,20 @@ const dbResultError = (err: unknown): { ok: false; error: string } => ({
 
 export function registerScanIpc(): void {
   ipcMain.handle(IPC.ScanStart, async (_event, raw) => {
-    const { programId, depth, roeConfirm, rateLimit } = z
-      .object({
-        programId: programIdSchema,
-        depth: z.enum(SCAN_DEPTHS),
-        roeConfirm: z.boolean(),
-        rateLimit: z.number().int().min(1).max(50).optional(),
-      })
-      .parse(raw)
-
-    if (!roeConfirm) return { ok: false, error: 'La confirmation des règles d’engagement est requise' } as const
-
     const repo = getRepository()
     const client = getClient()
     try {
+      const { programId, depth, roeConfirm, rateLimit } = z
+        .object({
+          programId: programIdSchema,
+          depth: z.enum(SCAN_DEPTHS),
+          roeConfirm: z.boolean(),
+          rateLimit: z.number().int().min(1).max(50).optional(),
+        })
+        .parse(raw)
+
+      if (!roeConfirm) return { ok: false, error: 'La confirmation des règles d’engagement est requise' } as const
+
       let detail
       if (client.getToken()) {
         detail = await fetchProgramDetail(client, programId)
@@ -76,8 +76,8 @@ export function registerScanIpc(): void {
   })
 
   ipcMain.handle(IPC.ScanList, (_event, rawId) => {
-    const programId = programIdSchema.parse(rawId)
     try {
+      const programId = programIdSchema.parse(rawId)
       const scans = getRepository()
         .listScans(programId)
         .map((s) => ({
@@ -97,10 +97,10 @@ export function registerScanIpc(): void {
   })
 
   ipcMain.handle(IPC.ScanEvents, (_event, raw) => {
-    const { scanId, afterSeq } = z
-      .object({ scanId: scanIdSchema, afterSeq: z.number().int().min(0).max(1_000_000) })
-      .parse(raw)
     try {
+      const { scanId, afterSeq } = z
+        .object({ scanId: scanIdSchema, afterSeq: z.number().int().min(0).max(1_000_000) })
+        .parse(raw)
       const repo = getRepository()
       const scan = repo.getScan(scanId)
       if (!scan) return { ok: false, error: `Scan introuvable (id=${scanId})` } as const
@@ -114,8 +114,8 @@ export function registerScanIpc(): void {
   })
 
   ipcMain.handle(IPC.ScanStop, (_event, rawId) => {
-    const scanId = scanIdSchema.parse(rawId)
     try {
+      const scanId = scanIdSchema.parse(rawId)
       const stopped = requestStop(scanId)
       return { ok: true, stopped } as const
     } catch (err) {

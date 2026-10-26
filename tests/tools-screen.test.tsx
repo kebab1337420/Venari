@@ -196,4 +196,37 @@ describe('ToolsScreen', () => {
     fireEvent.click(await screen.findByText('Guide'))
     expect(openExternal).toHaveBeenCalledWith('https://docs.example/nuclei')
   })
+
+  it("debloque l installation et affiche l erreur quand l IPC rejette", async () => {
+    install.mockRejectedValue(new Error('pont IPC coupe'))
+    render(<ToolsScreen />)
+    await screen.findByText('Nuclei')
+    fireEvent.click(toolCheckbox('Nuclei'))
+    fireEvent.click(installButton())
+
+    expect(await screen.findByText(/Installation interrompue : pont IPC coupe/)).toBeTruthy()
+    expect(installButton().disabled).toBe(false)
+  })
+
+  it('reaffiche le bouton quand l enregistrement du jeton est rejete', async () => {
+    ghSet.mockRejectedValue(new Error('401'))
+    render(<ToolsScreen />)
+    await screen.findByText('Nuclei')
+    fireEvent.change(screen.getByPlaceholderText('Token GitHub…'), { target: { value: 'ghp_x' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText(/Enregistrement du jeton impossible : 401/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Enregistrer' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('reaffiche le bouton quand le retrait du jeton est rejete', async () => {
+    ghStatus.mockResolvedValue({ ok: true, configured: true })
+    ghClear.mockRejectedValue(new Error('verrou'))
+    render(<ToolsScreen />)
+    await screen.findByText('Nuclei')
+    fireEvent.click(screen.getByRole('button', { name: 'Retirer' }))
+
+    expect(await screen.findByText(/Retrait du jeton impossible : verrou/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Retirer' }) as HTMLButtonElement).disabled).toBe(false)
+  })
 })

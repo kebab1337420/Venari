@@ -57,6 +57,15 @@ describe('selectTargets', () => {
     expect(selectTargets(scope)).toEqual(['https://scan.example.com'])
   })
 
+  it('écarte les wildcards, que curl et nuclei ne peuvent pas résoudre', () => {
+    const scope: ScopeDomain[] = [
+      d({ endpoint: '*.example.com' }),
+      d({ endpoint: 'https://*.api.example.com/v1' }),
+      d({ endpoint: 'app.example.com' }),
+    ]
+    expect(selectTargets(scope)).toEqual(['https://app.example.com'])
+  })
+
   it('ne bloque pas les IPv6 publiques', () => {
     expect(selectTargets([d({ endpoint: 'https://[2606:4700::1111]/' })])).toEqual([
       'https://[2606:4700::1111]',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveWebTarget } from '../src/shared/scan-targets'
+import { resolveScannableTarget, resolveWebTarget } from '../src/shared/scan-targets'
 
 describe('resolveWebTarget', () => {
   it('accepte un endpoint http(s) tel quel', () => {
@@ -23,5 +23,23 @@ describe('resolveWebTarget', () => {
     expect(resolveWebTarget('')).toBeNull()
     expect(resolveWebTarget('   ')).toBeNull()
     expect(resolveWebTarget('not a url')).toBeNull()
+  })
+})
+
+describe('resolveScannableTarget', () => {
+  it('garde les endpoints concrets', () => {
+    expect(resolveScannableTarget('app.example.com')?.href).toBe('https://app.example.com/')
+    expect(resolveScannableTarget('https://app.example.com/path')?.href).toBe('https://app.example.com/path')
+  })
+
+  it('écarte les wildcards, qui ne sont pas des cibles concrètes', () => {
+    expect(resolveScannableTarget('*.example.com')).toBeNull()
+    expect(resolveScannableTarget('https://*.api.example.com/v1')).toBeNull()
+    expect(resolveScannableTarget('*')).toBeNull()
+  })
+
+  it('écarte aussi les entrées invalides', () => {
+    expect(resolveScannableTarget('ftp://example.com')).toBeNull()
+    expect(resolveScannableTarget('not a url')).toBeNull()
   })
 })

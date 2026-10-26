@@ -75,6 +75,54 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('ne referme que la modale du dessus quand elles sont superposées', () => {
+    const onParentClose = vi.fn()
+    const onChildClose = vi.fn()
+    render(
+      <Modal title="Parent" onClose={onParentClose}>
+        <Modal title="Enfant" onClose={onChildClose}>
+          corps
+        </Modal>
+      </Modal>
+    )
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+
+    expect(onChildClose).toHaveBeenCalledTimes(1)
+    expect(onParentClose).not.toHaveBeenCalled()
+  })
+
+  it('referme la modale parente après la fermeture de l’enfant', () => {
+    const onParentClose = vi.fn()
+    const onChildClose = vi.fn()
+    const { rerender } = render(
+      <Modal title="Parent" onClose={onParentClose}>
+        <Modal title="Enfant" onClose={onChildClose}>
+          corps
+        </Modal>
+      </Modal>
+    )
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+    expect(onChildClose).toHaveBeenCalledTimes(1)
+    expect(onParentClose).not.toHaveBeenCalled()
+
+    rerender(
+      <Modal title="Parent" onClose={onParentClose}>
+        corps
+      </Modal>
+    )
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+
+    expect(onParentClose).toHaveBeenCalledTimes(1)
+  })
+
   it('retire son écouteur de clavier au démontage', () => {
     const onClose = vi.fn()
     const { unmount } = render(

@@ -43,6 +43,10 @@ const ProgramRow = memo(function ProgramRow({
   onRemoveTag
 }: RowProps) {
   const openFromKeyboard = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    // Seule la ligne elle-même ouvre le détail : sans ce garde-fou, Entrée ou
+    // Espace sur un bouton imbriqué (retrait de tag) déclenchait aussi la
+    // navigation, en plus de l'action du bouton.
+    if (e.target !== e.currentTarget) return
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       onOpenDetail(p)
@@ -82,7 +86,12 @@ const ProgramRow = memo(function ProgramRow({
               <button
                 key={t}
                 className="tag"
-                onClick={() => onRemoveTag(p, t)}
+                onClick={(e) => {
+                  // Le tag est dans la zone cliquable de la ligne : sans ça,
+                  // retirer un tag ouvrait aussi le détail du programme.
+                  e.stopPropagation()
+                  onRemoveTag(p, t)
+                }}
                 title="Retirer le tag"
               >
                 #{t} ✕

@@ -26,9 +26,19 @@ export function ScanSetupModal({ program, detail, onClose, onStarted, onViewLog 
   const [history, setHistory] = useState<ScanRecord[]>([])
 
   useEffect(() => {
-    void Api.scans.list(program.id).then((r) => {
-      if (r.ok) setHistory(r.scans)
-    })
+    let alive = true
+    void Api.scans.list(program.id)
+      .then((r) => {
+        if (alive && r.ok) setHistory(r.scans)
+      })
+      .catch(() => {
+        // Un rejet IPC ne doit pas partir en promesse non geree : on le signale
+        // sans bloquer le reste du formulaire.
+        if (alive) setError('Historique des scans indisponible.')
+      })
+    return () => {
+      alive = false
+    }
   }, [program.id])
 
   // Même résolution que le plan de scan côté main : sinon l'UI annonçait
@@ -41,13 +51,20 @@ export function ScanSetupModal({ program, detail, onClose, onStarted, onViewLog 
     if (!confirm) return
     setBusy(true)
     setError(null)
-    const r = await Api.scans.start(program.id, { depth, roeConfirm: true })
-    setBusy(false)
-    if (!r.ok) {
-      setError(r.error)
-      return
+    try {
+      const r = await Api.scans.start(program.id, { depth, roeConfirm: true })
+      if (!r.ok) {
+        setError(r.error)
+        return
+      }
+      onStarted(r.scanId)
+    } catch (e) {
+      // Sans ce catch, un rejet IPC laisserait busy=true : le bouton resterait
+      // desactive et l'utilisateur ne pourrait plus lancer de scan.
+      setError(`Lancement du scan impossible : ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setBusy(false)
     }
-    onStarted(r.scanId)
   }
 
   return (
@@ -216,7 +233,11 @@ export function ScanProgressModal({ program, scanId, onClose }: ProgressProps) {
   }, [events])
 
   const stop = async (): Promise<void> => {
-    await Api.scans.stop(scanId)
+    try {
+      await Api.scans.stop(scanId)
+    } catch (e) {
+      setError(`Arrêt du scan impossible : ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   const onScroll = (): void => {

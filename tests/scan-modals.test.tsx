@@ -187,6 +187,24 @@ describe('ScanSetupModal', () => {
     expect(onStarted).not.toHaveBeenCalled()
   })
 
+  it('debloque le bouton quand le lancement rejette', async () => {
+    start.mockRejectedValue(new Error('pont IPC coupe'))
+    const { onStarted } = renderSetup()
+    fireEvent.click(checkbox())
+    fireEvent.click(launchButton())
+
+    expect(await screen.findByText('Lancement du scan impossible : pont IPC coupe')).toBeTruthy()
+    await waitFor(() => expect(launchButton().disabled).toBe(false))
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  it("signale un historique indisponible sans bloquer le formulaire", async () => {
+    list.mockRejectedValue(new Error('db verrouillee'))
+    renderSetup()
+    expect(await screen.findByText('Historique des scans indisponible.')).toBeTruthy()
+    expect(launchButton()).toBeTruthy()
+  })
+
   it('affiche les regles d engagement quand elles existent', () => {
     renderSetup({
       detail: detail({
@@ -239,6 +257,14 @@ describe('ScanProgressModal', () => {
     render(<ScanProgressModal program={program} scanId={7} onClose={vi.fn()} />)
     fireEvent.click(screen.getByText('■ Arrêter'))
     await waitFor(() => expect(stop).toHaveBeenCalledWith(7))
+  })
+
+  it('signale un echec d arret sans promesse non geree', async () => {
+    events.mockResolvedValue({ ok: true, events: [], done: false })
+    stop.mockRejectedValue(new Error('scan deja fini'))
+    render(<ScanProgressModal program={program} scanId={7} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByText('■ Arrêter'))
+    expect(await screen.findByText('Arrêt du scan impossible : scan deja fini')).toBeTruthy()
   })
 
   it('ferme via le bouton Fermer', async () => {

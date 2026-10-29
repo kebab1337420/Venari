@@ -164,13 +164,19 @@ export function SettingsScreen({ onLogout }: Props) {
    * qui écrit dans le presse-papier, le renderer ne voit qu'un masque.
    */
   const copySecret = async (kind: SecretCopyKind, id: string | undefined, key: string): Promise<void> => {
-    const r = await Api.secret.copy(kind, id)
-    if (!r.ok) {
-      setError(r.error)
-      return
+    try {
+      const r = await Api.secret.copy(kind, id)
+      if (!r.ok) {
+        setError(r.error)
+        return
+      }
+      setCopied(key)
+      setTimeout(() => setCopied(null), 1500)
+    } catch (e) {
+      // Un rejet IPC (processus principal indisponible) laisserait sinon
+      // l'utilisateur croire que le jeton est dans son presse-papier.
+      setError(e instanceof Error ? e.message : String(e))
     }
-    setCopied(key)
-    setTimeout(() => setCopied(null), 1500)
   }
 
   const run = async (fn: () => Promise<void>) => {

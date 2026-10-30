@@ -28,6 +28,7 @@ export const IPC = {
   BrowserOpen: 'browser:open',
   ScanStart: 'scan:start',
   ScanList: 'scan:list',
+  ScanListAll: 'scan:listAll',
   ScanEvents: 'scan:events',
   ScanStop: 'scan:stop',
   ToolsList: 'tools:list',
@@ -229,6 +230,14 @@ export type ScanStartResult = { ok: true; scanId: number } | DbFail
 
 export type ScanListResult = { ok: true; scans: ScanRecord[] } | DbFail
 
+/** Scan + identite du programme : le tableau de bord est global, pas filtre. */
+export interface ScanOverview extends ScanRecord {
+  programName: string
+  programHandle: string
+}
+
+export type ScanListAllResult = { ok: true; scans: ScanOverview[] } | DbFail
+
 export type ScanEventsResult = { ok: true; events: ScanEvent[]; done: boolean } | DbFail
 
 export interface ToolEntry {
@@ -425,6 +434,7 @@ export interface BountyDeskBridge {
   scans: {
     start(programId: string, opts: { depth: ScanDepth; roeConfirm: boolean; rateLimit?: number }): Promise<ScanStartResult>
     list(programId: string): Promise<ScanListResult>
+    listAll(limit?: number): Promise<ScanListAllResult>
     events(scanId: number, afterSeq: number): Promise<ScanEventsResult>
     stop(scanId: number): Promise<DbResult>
   }

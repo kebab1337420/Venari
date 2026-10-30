@@ -96,6 +96,29 @@ export function registerScanIpc(): void {
     }
   })
 
+  ipcMain.handle(IPC.ScanListAll, (_event, raw) => {
+    try {
+      const limit = z.number().int().min(1).max(500).optional().parse(raw) ?? 200
+      const scans = getRepository()
+        .listAllScans(limit)
+        .map((s) => ({
+          id: s.id,
+          programId: s.program_id,
+          depth: s.depth as ScanDepth,
+          status: s.status,
+          rateLimit: s.rate_limit,
+          roeConfirm: s.roe_confirm === 1,
+          startedAt: s.started_at,
+          finishedAt: s.finished_at,
+          programName: s.program_name ?? s.program_id,
+          programHandle: s.program_handle ?? '',
+        }))
+      return { ok: true, scans } as const
+    } catch (err) {
+      return dbResultError(err)
+    }
+  })
+
   ipcMain.handle(IPC.ScanEvents, (_event, raw) => {
     try {
       const { scanId, afterSeq } = z

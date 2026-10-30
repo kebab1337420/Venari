@@ -156,7 +156,8 @@ export function ScanSetupModal({ program, detail, onClose, onStarted, onViewLog 
 }
 
 interface ProgressProps {
-  program: ProgramSummary
+  /** Seul le nom est affiche : le tableau de bord global n'a pas la fiche complete. */
+  program: { name: string }
   scanId: number
   onClose: () => void
 }

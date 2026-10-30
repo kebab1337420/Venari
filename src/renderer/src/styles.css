@@ -1230,6 +1230,13 @@ select {
 .scan-line.err .scan-msg { color: var(--red); }
 .scan-line.ok .scan-msg { color: var(--green); }
 .scan-history { display: flex; flex-direction: column; gap: 4px; }
+.scan-status { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--muted); }
+.scan-status.running { color: var(--accent); border-color: currentColor; background: var(--accent-soft); }
+.scan-status.done { color: var(--green); border-color: currentColor; background: var(--green-soft); }
+.scan-status.error { color: var(--red); border-color: currentColor; background: var(--red-soft); }
+.scan-status.stopped { color: var(--amber); border-color: currentColor; background: var(--amber-soft); }
+.scans-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.scans-table td { vertical-align: middle; }
 .scan-follow { align-self: flex-end; margin-top: -4px; }
 .scan-h-item { display: flex; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); color: var(--text); cursor: pointer; font-size: 12px; }
 .scan-h-item:hover { border-color: var(--border-strong); }

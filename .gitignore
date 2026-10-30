@@ -8,3 +8,6 @@ dist/
 remote-agent/target/
 opencode.json
 
+
+# configs locales
+opencode.json

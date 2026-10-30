@@ -224,6 +224,26 @@ function resolveCmd(cmd: string): string {
   return resolveSystemBin(cmd) ?? cmd
 }
 
+/**
+ * GNU tar traite un chemin Windows (ex. C:\Users\...) comme un acces distant
+ * parce qu'il contient un ':'. GNU tar accepte --force-local pour forcer la
+ * lecture locale ; bsdtar (tar.exe de Windows 10+) gerent les lettres de
+ * lecteur nativement et ne reconnait pas l'option. On ne l'ajoute donc qu'au
+ * tar de GNU, memoise la detection a la premiere utilisation.
+ */
+let gnuTarState: 'unknown' | 'gnu' | 'other' = 'unknown'
+async function isGnuTar(): Promise<boolean> {
+  if (gnuTarState !== 'unknown') return gnuTarState === 'gnu'
+  gnuTarState = 'other'
+  try {
+    const { code, stdout } = await runCapture({ cmd: 'tar', args: ['--version'] })
+    if (code === 0 && /GNU tar/.test(stdout)) gnuTarState = 'gnu'
+  } catch {
+    // tar absent ou non GNU : on garde 'other' -> aucune option force-local
+  }
+  return gnuTarState === 'gnu'
+}
+
 function run(
   cmd: string,
   args: string[],
@@ -502,12 +522,13 @@ export function selectWindowsAsset(
 /** Liste les entrees d'une archive sans l'extraire, avec les memes outils que l'extraction. */
 async function listArchiveEntries(archive: string): Promise<string[] | null> {
   const isZip = /\.zip$/i.test(archive)
+  const forceLocal = (await isGnuTar()) ? ['--force-local'] : []
   const attempts: Spawn[] = isZip
     ? [
-        { cmd: 'tar', args: ['-tf', archive] },
+        { cmd: 'tar', args: [...forceLocal, '-tf', archive] },
         { cmd: 'unzip', args: ['-Z1', archive] }
       ]
-    : [{ cmd: 'tar', args: ['-tf', archive] }]
+    : [{ cmd: 'tar', args: [...forceLocal, '-tf', archive] }]
 
   for (const attempt of attempts) {
     let captured: { code: number; stdout: string }
@@ -538,7 +559,10 @@ export function unsafeArchiveEntry(entry: string): string | null {
   return null
 }
 
-/** Refuse une archive dont une entree s'echapperait du dossier de destination. */
+/** Refuse une archive dont une entree s'echapperait du dossier de destination.
+ *  --force-local : les chemins d'acces sous Windows (ex. C:\Users\...) portent
+ *  un ':' que GNU tar interprète comme un host distant ; l'option force la lecture
+ *  locale et est ignorée par bsdtar (Windows 10+). */
 export async function assertStaysInside(archive: string): Promise<void> {
   const entries = await listArchiveEntries(archive)
   // Echec ferme : si on ne peut pas lister l'archive, on ne peut pas garantir
@@ -556,12 +580,15 @@ async function extractArchive(archive: string, dest: string, onOutput: (line: st
   await assertStaysInside(archive)
   const isZip = /\.zip$/i.test(archive)
   // tar de GNU (Linux) ne gère pas le zip ; bsdtar (Windows 10+) le gère.
+  // `--force-local` : sous Windows un chemin `C:\...` contient un ':' que GNU
+  // tar prend pour un hôte distant ; bsdtar, lui, ne connaît pas l'option.
+  const forceLocal = (await isGnuTar()) ? ['--force-local'] : []
   const attempts: Spawn[] = isZip
     ? [
-        { cmd: 'tar', args: ['-xf', archive, '-C', dest] },
+        { cmd: 'tar', args: [...forceLocal, '-xf', archive, '-C', dest] },
         { cmd: 'unzip', args: ['-o', '-q', archive, '-d', dest] }
       ]
-    : [{ cmd: 'tar', args: ['-xf', archive, '-C', dest] }]
+    : [{ cmd: 'tar', args: [...forceLocal, '-xf', archive, '-C', dest] }]
 
   for (const attempt of attempts) {
     let code: number

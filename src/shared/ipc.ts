@@ -57,7 +57,10 @@ export const IPC = {
   AgentSessionDecide: 'agent:sessionDecide',
   AgentSessionEnd: 'agent:sessionEnd',
   AgentViewToken: 'agent:viewToken',
-  SecretCopy: 'secret:copy'
+  SecretCopy: 'secret:copy',
+  ReportsList: 'reports:list',
+  ReportsOpen: 'reports:open',
+  ReportsReveal: 'reports:reveal'
 } as const
 
 export interface AuthStatus {
@@ -405,6 +408,19 @@ export type SecretCopyResult = { ok: true } | DbFail
 
 export type CredentialRevealResult = { ok: true; secret: string } | DbFail
 
+/** Rapport Markdown ecrit par `submit_report` (dossier de donnees Venari). */
+export interface ReportFile {
+  programId: string
+  name: string
+  path: string
+  size: number
+  updatedAt: number
+}
+
+export type ReportsListResult = { ok: true; reports: ReportFile[] } | DbFail
+
+export type ReportOpenResult = { ok: boolean; error?: string }
+
 export interface BountyDeskBridge {
   auth: {
     getStatus(): Promise<AuthStatus>
@@ -490,5 +506,10 @@ export interface BountyDeskBridge {
     remove(id: number): Promise<DbResult>
     addToProgram(programId: string, tagId: number): Promise<DbResult>
     removeFromProgram(programId: string, tagId: number): Promise<DbResult>
+  }
+  reports: {
+    list(): Promise<ReportsListResult>
+    open(programId: string, name: string): Promise<ReportOpenResult>
+    reveal(programId: string, name: string): Promise<ReportOpenResult>
   }
 }

@@ -129,6 +129,10 @@ Le port MCP n'est volontairement pas vérifié par les jobs de smoke test : le s
 - **Un scan ne peut pas rester bloqué** : chaque étape a un plafond de 30 min (au-delà, l'outil est arrêté et le scan le dit), le flux est plafonné à 5 000 événements par scan (la troncature est annoncée, jamais silencieuse), et le bouton **Arrêter** tue l'outil *et* ses sous-processus — ffuf ou nuclei lancent des enfants, sans cela un scan orphelin continuerait après l'arrêt.
 - **Tableau de bord Scans** (menu **Scans**) : tous les scans, tous programmes confondus, avec programme, profondeur, statut, début et durée. La liste se rafraîchit automatiquement tant qu'un scan tourne, et le journal live + le bouton **Arrêter** restent accessibles même après avoir fermé la fiche du programme.
 
+### Rapports
+- **Écran Rapports** : les rapports Markdown écrits par `submit_report` (dossier `reports/` du dossier de données) sont listés dans l'app, filtrables par fichier/programme, avec date, taille, **Ouvrir** et **Dossier**. Aucun chemin n'est fourni par le renderer : seul un couple (programme, fichier) validé est résolu côté processus principal.
+- Rien n'est soumis automatiquement à la plateforme : l'API chercheur d'Intigriti reste en lecture seule.
+
 ### Outils
 
 Le catalogue compte **144 entrées** réparties en six catégories (`recon` 65, `enumer` 9, `fuzz` 14, `network` 16, `utility` 38, `ai` 2) :

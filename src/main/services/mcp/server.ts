@@ -8,10 +8,12 @@ import { mkdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { app } from 'electron'
 import type { McpStatusInfo, ProgramDetailData, ScanDepth } from '../../../shared/ipc'
+import { FINDING_SEVERITIES, FINDING_STATUSES } from '../../../shared/ipc'
 import { Throttler } from '../../../services/intigriti'
 import { getClient } from '../../app-state'
 import { getRepository } from '../../db'
 import { fetchProgramDetail, getCachedProgramDetail } from '../program-detail'
+import { listReports, readReport } from '../reports'
 import { buildPlan, inScopeHosts, isPrivateHost, isUrlInScope, selectTargets, MAX_TARGETS } from '../scan/plan'
 import { activeScanCount, activeScanForProgram, killTree, startScan } from '../scan/runner'
 import { getTool, TOOL_CATALOG } from '../tools/catalog'
@@ -51,6 +53,34 @@ function asString(value: unknown, max = 200): string | null {
 function asInt(value: unknown, min: number, max: number): number | null {
   if (typeof value !== 'number' || !Number.isInteger(value)) return null
   return value >= min && value <= max ? value : null
+}
+
+function severityByScore(score: number): (typeof FINDING_SEVERITIES)[number] {
+  if (score >= 9) return 'critical'
+  if (score >= 7) return 'high'
+  if (score >= 4) return 'medium'
+  if (score > 0) return 'low'
+  return 'info'
+}
+
+/**
+ * `submit_report` et `record_finding` acceptent « high », un score (7.5) ou un
+ * vecteur CVSS complet. On normalise toujours vers le meme couple
+ * (severite, score) pour que le suivi reste triable.
+ */
+function normalizeSeverity(raw: string | null): { severity: (typeof FINDING_SEVERITIES)[number]; cvss: number | null } {
+  if (!raw) return { severity: 'info', cvss: null }
+  const lowered = raw.trim().toLowerCase()
+  if ((FINDING_SEVERITIES as readonly string[]).includes(lowered)) {
+    return { severity: lowered as (typeof FINDING_SEVERITIES)[number], cvss: null }
+  }
+  const asNumber = Number(lowered)
+  if (Number.isFinite(asNumber) && asNumber >= 0 && asNumber <= 10) {
+    return { severity: severityByScore(asNumber), cvss: asNumber }
+  }
+  const computed = computeCvssBase(raw.trim())
+  if (computed.ok) return { severity: severityByScore(computed.baseScore), cvss: computed.baseScore }
+  return { severity: 'info', cvss: null }
 }
 
 /** Plafond du champ note d'un programme, toutes notes confondues. */
@@ -1352,6 +1382,28 @@ const TOOL_DEFS: McpToolDef[] = [
       const remediation = opt(args.remediation, 20_000)
       const poc = opt(args.poc, 20_000)
 
+      // Une cible fournie sous forme d'URL doit etre in-scope, comme pour
+      // http_request : sans ce controle, un rapport pouvait documenter une
+      // cible que le programme n'autorise pas.
+      if (asset) {
+        let assetUrl: URL | null = null
+        try {
+          assetUrl = new URL(asset)
+        } catch {
+          assetUrl = null
+        }
+        if (assetUrl && (assetUrl.protocol === 'http:' || assetUrl.protocol === 'https:')) {
+          const detail = await resolveProgramDetail(programId)
+          if (!detail) return { text: `Scope indisponible pour ${programId} : impossible de vérifier la cible`, isError: true }
+          if (!isUrlInScope(detail.scope, assetUrl)) {
+            return {
+              text: `Cible hors scope : ${assetUrl.hostname}. Un rapport ne peut viser qu'un actif in-scope du programme.`,
+              isError: true,
+            }
+          }
+        }
+      }
+
       const now = new Date()
       const stamp = now.toISOString().replace(/[:.]/g, '-')
       const slug = title
@@ -1396,6 +1448,37 @@ const TOOL_DEFS: McpToolDef[] = [
       } catch (err) {
         return { text: `Écriture du rapport échouée : ${err instanceof Error ? err.message : String(err)}`, isError: true }
       }
+      // Le rapport devient un finding « rapporté » : c'est le lien entre la
+      // chasse, le suivi et le fichier Markdown, sans double saisie.
+      const repo = getRepository()
+      const sev = normalizeSeverity(severity === 'non évaluée' ? null : severity)
+      const relativeReport = `${safeId}/${`${stamp}-${slug}.md`}`
+      const existing = repo.findDuplicateFinding(programId, asset, title)
+      let findingId: number
+      if (existing) {
+        repo.updateFinding(existing.id, {
+          status: 'reported',
+          reportPath: relativeReport,
+          description: description || existing.description,
+          poc: poc || existing.poc,
+          severity: existing.severity === 'info' ? sev.severity : existing.severity,
+          cvss: existing.cvss ?? sev.cvss,
+        })
+        findingId = existing.id
+      } else {
+        findingId = repo.createFinding({
+          programId,
+          asset,
+          title,
+          severity: sev.severity,
+          cvss: sev.cvss,
+          status: 'reported',
+          description,
+          poc,
+          scanId: null,
+          reportPath: relativeReport,
+        })
+      }
       return {
         text: JSON.stringify(
           {
@@ -1404,14 +1487,197 @@ const TOOL_DEFS: McpToolDef[] = [
             program: prog.name,
             title,
             severity,
+            findingId,
             submitted: false,
             note: 'Rapport écrit localement ; soumission manuelle requise (API Intigriti en lecture seule).',
           },
           null,
           2,
         ),
-        details: { path: file, submitted: false },
+        details: { path: file, submitted: false, findingId },
       }
+    },
+  },
+  {
+    name: 'record_finding',
+    description:
+      'Enregistre un finding dans le suivi local de Venari (le tableau Findings de l’application).'
+      + ' Un finding identique (même programme, même cible, même titre à la casse près) est mis à jour au lieu'
+      + ' d’être dupliqué : re-soumettre après un scan ne crée pas de doublon. Écriture locale uniquement,'
+      + ' aucun appel réseau. Renvoie l’id et un drapeau `duplicate`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        programId: { ...STR, description: 'programme concerné (doit exister localement)' },
+        title: { ...STR, description: 'titre court du finding' },
+        asset: { ...STR, description: 'cible affectée (URL, endpoint)' },
+        severity: { ...STR, description: 'info/low/medium/high/critical, un score 0-10 ou un vecteur CVSS' },
+        description: { type: 'string', description: 'description de la vulnérabilité' },
+        poc: { type: 'string', description: 'preuve (requête, sortie, capture)' },
+        scanId: { ...INT, description: 'scan d’origine, optionnel' },
+      },
+      required: ['programId', 'title'],
+    },
+    handler: async (args) => {
+      const programId = asString(args.programId)
+      const title = asString(args.title, 300)
+      if (!programId) return { text: 'programId requis (chaîne 1-200)', isError: true }
+      if (!title) return { text: 'title requis (chaîne 1-300)', isError: true }
+      const repo = getRepository()
+      if (!repo.getProgram(programId)) return { text: `Programme inconnu : ${programId}`, isError: true }
+      const asset = typeof args.asset === 'string' ? args.asset.trim().slice(0, 500) : ''
+      const rawSeverity = typeof args.severity === 'string' ? args.severity : null
+      const sev = normalizeSeverity(rawSeverity)
+      const description = typeof args.description === 'string' ? args.description.trim().slice(0, 50_000) : ''
+      const poc = typeof args.poc === 'string' ? args.poc.trim().slice(0, 20_000) : ''
+      const scanId = args.scanId === undefined ? null : asInt(args.scanId, 1, Number.MAX_SAFE_INTEGER)
+      if (args.scanId !== undefined && scanId === null) return { text: 'scanId doit être un entier positif', isError: true }
+
+      const duplicate = repo.findDuplicateFinding(programId, asset, title)
+      if (duplicate) {
+        repo.updateFinding(duplicate.id, {
+          severity: sev.severity,
+          cvss: sev.cvss ?? duplicate.cvss,
+          description: description || duplicate.description,
+          poc: poc || duplicate.poc,
+        })
+        return {
+          text: JSON.stringify({ ok: true, id: duplicate.id, duplicate: true }, null, 2),
+          details: { id: duplicate.id, duplicate: true },
+        }
+      }
+      const id = repo.createFinding({
+        programId,
+        asset,
+        title,
+        severity: sev.severity,
+        cvss: sev.cvss,
+        status: 'open',
+        description,
+        poc,
+        scanId,
+        reportPath: null,
+      })
+      return {
+        text: JSON.stringify({ ok: true, id, duplicate: false }, null, 2),
+        details: { id, duplicate: false },
+      }
+    },
+  },
+  {
+    name: 'list_findings',
+    description:
+      'Liste le suivi de findings local (tri par dernière mise à jour). Filtres optionnels par programme,'
+      + ' statut (open/triaged/reported/fixed/duplicate/wontfix) et sévérité. Lecture seule.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        programId: STR,
+        status: { type: 'string', enum: [...FINDING_STATUSES] },
+        severity: { type: 'string', enum: [...FINDING_SEVERITIES] },
+        limit: { ...INT, description: '1-200, défaut 100' },
+      },
+    },
+    handler: async (args) => {
+      const status = typeof args.status === 'string' && (FINDING_STATUSES as readonly string[]).includes(args.status)
+        ? args.status
+        : undefined
+      const severity = typeof args.severity === 'string' && (FINDING_SEVERITIES as readonly string[]).includes(args.severity)
+        ? args.severity
+        : undefined
+      const programId = args.programId === undefined ? undefined : (asString(args.programId) ?? undefined)
+      if (args.programId !== undefined && !programId) return { text: 'programId invalide', isError: true }
+      const limit = args.limit === undefined ? 100 : asInt(args.limit, 1, 200)
+      if (limit === null) return { text: 'limit doit être un entier entre 1 et 200', isError: true }
+      const rows = getRepository().listFindings({ programId, status, severity, limit }).map((f) => ({
+        id: f.id,
+        programId: f.program_id,
+        program: f.program_name,
+        title: f.title,
+        asset: f.asset,
+        severity: f.severity,
+        cvss: f.cvss,
+        status: f.status,
+        reportPath: f.report_path,
+        scanId: f.scan_id,
+        updatedAt: f.updated_at,
+      }))
+      return { text: JSON.stringify({ findings: rows }, null, 2), details: { count: rows.length } }
+    },
+  },
+  {
+    name: 'update_finding',
+    description: 'Met à jour un finding du suivi (statut, sévérité, CVSS, description, preuve). Renvoie le finding résultant.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        findingId: INT,
+        status: { type: 'string', enum: [...FINDING_STATUSES] },
+        severity: { type: 'string', enum: [...FINDING_SEVERITIES] },
+        cvss: { type: 'number', minimum: 0, maximum: 10 },
+        description: { type: 'string' },
+        poc: { type: 'string' },
+      },
+      required: ['findingId'],
+    },
+    handler: async (args) => {
+      const findingId = asInt(args.findingId, 1, Number.MAX_SAFE_INTEGER)
+      if (!findingId) return { text: 'findingId entier positif requis', isError: true }
+      const repo = getRepository()
+      const current = repo.getFinding(findingId)
+      if (!current) return { text: `Finding introuvable (id=${findingId})`, isError: true }
+      const status = typeof args.status === 'string' && (FINDING_STATUSES as readonly string[]).includes(args.status)
+        ? args.status
+        : undefined
+      const severity = typeof args.severity === 'string' && (FINDING_SEVERITIES as readonly string[]).includes(args.severity)
+        ? args.severity
+        : undefined
+      const cvss = args.cvss === undefined ? undefined : typeof args.cvss === 'number' && args.cvss >= 0 && args.cvss <= 10 ? args.cvss : null
+      if (args.cvss !== undefined && cvss === null) return { text: 'cvss doit être un nombre entre 0 et 10', isError: true }
+      const description = typeof args.description === 'string' ? args.description.trim().slice(0, 50_000) : undefined
+      const poc = typeof args.poc === 'string' ? args.poc.trim().slice(0, 20_000) : undefined
+      try {
+        repo.updateFinding(findingId, { status, severity, cvss, description: description || undefined, poc: poc || undefined })
+      } catch (err) {
+        return { text: `Mise à jour impossible : ${err instanceof Error ? err.message : String(err)}`, isError: true }
+      }
+      const f = repo.getFinding(findingId)
+      return { text: JSON.stringify(f, null, 2), details: { findingId } }
+    },
+  },
+  {
+    name: 'list_reports',
+    description:
+      'Liste les rapports Markdown écrits par submit_report dans le dossier de données de Venari, du plus récent'
+      + ' au plus ancien. Lecture seule.',
+    inputSchema: { type: 'object', properties: {} },
+    handler: async () => {
+      const reports = listReports().slice(0, 200).map((r) => ({
+        programId: r.programId,
+        path: r.relativePath,
+        name: r.name,
+        size: r.size,
+        mtime: r.mtime,
+      }))
+      return { text: JSON.stringify({ reports }, null, 2), details: { count: reports.length } }
+    },
+  },
+  {
+    name: 'read_report',
+    description:
+      'Lit un rapport Markdown listé par list_reports (chemin relatif). Aperçu plafonné à 512 Ko ;'
+      + ' `truncated` signale la troncature. Aucun accès hors du dossier de rapports.',
+    inputSchema: {
+      type: 'object',
+      properties: { path: { ...STR, description: 'chemin relatif renvoyé par list_reports, ex. <programId>/<fichier>.md' } },
+      required: ['path'],
+    },
+    handler: async (args) => {
+      const relativePath = asString(args.path, 1000)
+      if (!relativePath) return { text: 'path requis (chaîne 1-1000)', isError: true }
+      const res = readReport(relativePath)
+      if (!res.ok) return { text: res.error, isError: true }
+      return { text: res.content, details: { path: relativePath, truncated: res.truncated } }
     },
   },
 ]

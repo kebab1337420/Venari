@@ -4,13 +4,14 @@ import { LoginScreen } from './screens/Login'
 import { ProgramsScreen } from './screens/Programs'
 import { ToolsScreen } from './screens/Tools'
 import { McpScreen } from './screens/Mcp'
+import { FindingsScreen } from './screens/Findings'
 import { ReportsScreen } from './screens/Reports'
 import { ScansScreen } from './screens/Scans'
 import { SettingsScreen } from './screens/Settings'
 
 type View = 'loading' | 'login' | 'app'
 
-export type Section = 'programs' | 'scans' | 'reports' | 'tools' | 'mcp' | 'settings'
+export type Section = 'programs' | 'findings' | 'scans' | 'reports' | 'tools' | 'mcp' | 'settings'
 
 const icon = {
   programs: (
@@ -20,6 +21,18 @@ const icon = {
         fill="none"
         stroke="currentColor"
         strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  findings: (
+    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+      <path
+        d="M6 4h12M6 20h12M7 4v16M17 4v16M3.5 9h3.5M17 9h3.5M3.5 15h3.5M17 15h3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>
@@ -93,6 +106,7 @@ const icon = {
 
 const NAV: { id: Section; label: string; icon: ReactNode }[] = [
   { id: 'programs', label: 'Programmes', icon: icon.programs },
+  { id: 'findings', label: 'Findings', icon: icon.findings },
   { id: 'scans', label: 'Scans', icon: icon.scans },
   { id: 'reports', label: 'Rapports', icon: icon.reports },
   { id: 'tools', label: 'Outils', icon: icon.tools },
@@ -162,6 +176,8 @@ export function App() {
     switch (id) {
       case 'programs':
         return <ProgramsScreen />
+      case 'findings':
+        return <FindingsScreen />
       case 'scans':
         return <ScansScreen />
       case 'reports':

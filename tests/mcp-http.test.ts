@@ -220,7 +220,7 @@ describe('serveur MCP (HTTP réel)', () => {
     expect(bad.status).toBe(400)
   })
 
-  it('tools/list expose les 18 outils attendus', async () => {
+  it('tools/list expose les 23 outils attendus', async () => {
     const res = await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
     const json = (await res.json()) as { result: { tools: { name: string; description: string }[] } }
     const names = json.result.tools.map((t) => t.name)
@@ -228,7 +228,8 @@ describe('serveur MCP (HTTP réel)', () => {
       'list_programs', 'get_program_detail', 'list_credentials', 'set_note', 'list_notes',
       'list_tools', 'install_tool', 'run_tool', 'open_browser', 'fetch_page', 'list_scans',
       'start_scan', 'get_scan', 'scan_events', 'dedupe_findings', 'cvss_score',
-      'http_request', 'submit_report',
+      'http_request', 'submit_report', 'record_finding', 'list_findings', 'update_finding',
+      'list_reports', 'read_report',
     ])
     for (const tool of json.result.tools) {
       expect(tool.description.length).toBeGreaterThan(20)
@@ -836,6 +837,68 @@ describe('outils MCP ajoutés (notes, page, scans, dedupe, CVSS)', () => {
   it('submit_report refuse un programme inconnu ou des champs requis manquants', async () => {
     expect((await callTool('submit_report', { programId: 'prog-1', title: 'T' })).isError).toBe(true)
     expect((await callTool('submit_report', { programId: 'inconnu', title: 'T', description: 'D' })).isError).toBe(true)
+  })
+
+  // --- findings & rapports ---------------------------------------------------
+  it('submit_report cree un finding lie au rapport', async () => {
+    const out = await callTool('submit_report', {
+      programId: 'prog-1',
+      title: 'SSRF sur /proxy',
+      severity: 'high',
+      description: 'Le proxy accepte une URL interne.',
+    })
+    expect(out.isError).toBe(false)
+    const payload = out.payload as { findingId: number }
+    expect(payload.findingId).toBeGreaterThan(0)
+    const list = await callTool('list_findings', { programId: 'prog-1' })
+    const rows = (list.payload as { findings: { id: number; status: string; reportPath: string }[] }).findings
+    const row = rows.find((f) => f.id === payload.findingId)!
+    expect(row.status).toBe('reported')
+    expect(row.reportPath).toMatch(/^prog-1\/.+\.md$/)
+  })
+
+  it('record_finding deduplique et update_finding borne les valeurs', async () => {
+    const first = await callTool('record_finding', {
+      programId: 'prog-1',
+      title: 'IDOR factures',
+      asset: 'https://app.acme.example/factures',
+      severity: '7.5',
+    })
+    expect(first.isError).toBe(false)
+    const created = first.payload as { id: number; duplicate: boolean }
+    expect(created.duplicate).toBe(false)
+
+    const again = await callTool('record_finding', {
+      programId: 'prog-1',
+      title: '  idor FACTURES ',
+      asset: 'https://APP.acme.example/factures',
+      severity: 'medium',
+    })
+    const dedup = again.payload as { id: number; duplicate: boolean }
+    expect(dedup).toMatchObject({ id: created.id, duplicate: true })
+
+    const upd = await callTool('update_finding', { findingId: created.id, status: 'fixed' })
+    expect(upd.isError).toBe(false)
+    expect((upd.payload as { status: string }).status).toBe('fixed')
+
+    expect((await callTool('update_finding', { findingId: 9999, status: 'fixed' })).isError).toBe(true)
+    expect((await callTool('update_finding', { findingId: created.id, cvss: 11 })).isError).toBe(true)
+  })
+
+  it('list_reports puis read_report relisent le Markdown ecrit', async () => {
+    await callTool('submit_report', {
+      programId: 'prog-1',
+      title: 'XSS sur /search',
+      severity: 'medium',
+      description: 'Le parametre q est reflechi.',
+    })
+    const listed = await callTool('list_reports')
+    const reports = (listed.payload as { reports: { path: string }[] }).reports
+    expect(reports.length).toBeGreaterThan(0)
+    const read = await callTool('read_report', { path: reports[0]!.path })
+    expect(read.isError).toBe(false)
+    expect(read.text).toContain('#')
+    expect((await callTool('read_report', { path: '../secret.md' })).isError).toBe(true)
   })
 })
 

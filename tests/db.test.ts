@@ -242,7 +242,7 @@ describe('Repository', () => {
     expect(busy.timeout).toBe(5000)
 
     const version = db.prepare('SELECT user_version FROM pragma_user_version').get() as unknown as { user_version: number }
-    expect(version.user_version).toBe(7)
+    expect(version.user_version).toBe(8)
 
     const indexes = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as unknown as Array<{ name: string }>).map((i) => i.name)
     expect(indexes).toContain('idx_programs_name_nocase')

@@ -18,6 +18,11 @@ import type {
   DbResult,
   DetailResult,
   ExportFormat,
+  FindingInput,
+  FindingSaveResult,
+  FindingsListResult,
+  FindingsQuery,
+  FindingsStatsResult,
   GroupInfo,
   McpDiagnoseResult,
   McpFirewallFixResult,
@@ -34,6 +39,7 @@ import type {
   ProgramsExportResult,
   ProgramsPage,
   ProgramsQuery,
+  ReportReadResult,
   ReportOpenResult,
   ReportsListResult,
   ScanDepth,
@@ -88,6 +94,19 @@ export const Api = {
     events: (scanId: number, afterSeq: number): Promise<ScanEventsResult> =>
       window.bountydesk.scans.events(scanId, afterSeq),
     stop: (scanId: number): Promise<DbResult> => window.bountydesk.scans.stop(scanId)
+  },
+  findings: {
+    list: (query: FindingsQuery): Promise<FindingsListResult> => window.bountydesk.findings.list(query),
+    stats: (programId?: string): Promise<FindingsStatsResult> => window.bountydesk.findings.stats(programId),
+    create: (input: FindingInput): Promise<FindingSaveResult> => window.bountydesk.findings.create(input),
+    update: (id: number, patch: Partial<FindingInput>): Promise<DbResult> =>
+      window.bountydesk.findings.update(id, patch),
+    remove: (id: number): Promise<DbResult> => window.bountydesk.findings.remove(id)
+  },
+  reports: {
+    list: (): Promise<ReportsListResult> => window.bountydesk.reports.list(),
+    read: (relativePath: string): Promise<ReportReadResult> => window.bountydesk.reports.read(relativePath),
+    openFolder: (relativePath?: string): Promise<DbResult> => window.bountydesk.reports.openFolder(relativePath)
   },
   tools: {
     list: (): Promise<ToolsListResult> => window.bountydesk.tools.list(),

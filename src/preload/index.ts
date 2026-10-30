@@ -45,6 +45,10 @@ const bridge: BountyDeskBridge = {
     list: () => ipcRenderer.invoke(IPC.ReportsList),
     read: (relativePath: string) => ipcRenderer.invoke(IPC.ReportsRead, relativePath),
     openFolder: (relativePath?: string) => ipcRenderer.invoke(IPC.ReportsOpenFolder, relativePath),
+    open: (programId: string, name: string) =>
+      ipcRenderer.invoke(IPC.ReportsOpen, { programId, name }),
+    reveal: (programId: string, name: string) =>
+      ipcRenderer.invoke(IPC.ReportsReveal, { programId, name }),
   },
   tools: {
     list: () => ipcRenderer.invoke(IPC.ToolsList),

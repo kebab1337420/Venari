@@ -38,6 +38,8 @@ export const IPC = {
   FindingsRemove: 'findings:remove',
   ReportsList: 'reports:list',
   ReportsRead: 'reports:read',
+  ReportsOpen: 'reports:open',
+  ReportsReveal: 'reports:reveal',
   ReportsOpenFolder: 'reports:openFolder',
   ToolsList: 'tools:list',
   ToolsInstall: 'tools:install',
@@ -301,6 +303,7 @@ export type FindingsStatsResult = { ok: true; stats: Record<string, number> } | 
 
 export type FindingSaveResult = { ok: true; id: number } | DbFail
 
+
 export type ReportReadResult = { ok: true; content: string; truncated: boolean } | DbFail
 
 export interface ToolEntry {
@@ -525,6 +528,8 @@ export interface BountyDeskBridge {
     list(): Promise<ReportsListResult>
     read(relativePath: string): Promise<ReportReadResult>
     openFolder(relativePath?: string): Promise<DbResult>
+    open(programId: string, name: string): Promise<ReportOpenResult>
+    reveal(programId: string, name: string): Promise<ReportOpenResult>
   }
   tools: {
     list(): Promise<ToolsListResult>
@@ -579,5 +584,4 @@ export interface BountyDeskBridge {
     addToProgram(programId: string, tagId: number): Promise<DbResult>
     removeFromProgram(programId: string, tagId: number): Promise<DbResult>
   }
-
 }

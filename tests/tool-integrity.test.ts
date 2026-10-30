@@ -64,6 +64,14 @@ describe('integrity — comparaison de sommes', () => {
     expect(safeEqualHex(HEX_A, HEX_B)).toBe(false)
     expect(safeEqualHex(HEX_A, HEX_A.slice(0, 32))).toBe(false)
   })
+
+  it('rejette les entrees vides, de longueur impaire, non-hex ou de casse incoherente', () => {
+    expect(safeEqualHex('', '')).toBe(false)
+    expect(safeEqualHex('abc', 'abc')).toBe(false) // longueur impaire -> pas un hex valide
+    expect(safeEqualHex(HEX_A, HEX_A.replace(/a/g, 'g'))).toBe(false) // caractere non-hex
+    expect(safeEqualHex(HEX_A.toUpperCase(), HEX_A.toUpperCase())).toBe(true) // casse insensible
+    expect(safeEqualHex(HEX_A.toUpperCase(), HEX_B.toUpperCase())).toBe(false)
+  })
 })
 
 describe('integrity — SHA-256 d\'un fichier', () => {

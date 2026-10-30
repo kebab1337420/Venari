@@ -56,7 +56,7 @@ export function sha256File(path: string): Promise<string> {
 
 /** Comparaison a temps constant des deux sommes hex (evite les fuites de timing). */
 export function safeEqualHex(a: string, b: string): boolean {
-  if (a.length === 0 || a.length !== b.length) return false
+  if (a.length === 0 || a.length !== b.length || a.length % 2 !== 0) return false
   if (!/^[0-9a-f]+$/i.test(a) || !/^[0-9a-f]+$/i.test(b)) return false
   const ba = Buffer.from(a, 'hex')
   const bb = Buffer.from(b, 'hex')

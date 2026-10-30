@@ -30,6 +30,7 @@ const bridge: BountyDeskBridge = {
   scans: {
     start: (programId: string, opts) => ipcRenderer.invoke(IPC.ScanStart, { programId, ...opts }),
     list: (programId: string) => ipcRenderer.invoke(IPC.ScanList, programId),
+    listAll: (limit?: number) => ipcRenderer.invoke(IPC.ScanListAll, limit),
     events: (scanId: number, afterSeq: number) => ipcRenderer.invoke(IPC.ScanEvents, { scanId, afterSeq }),
     stop: (scanId: number) => ipcRenderer.invoke(IPC.ScanStop, scanId),
   },

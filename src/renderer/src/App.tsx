@@ -4,11 +4,12 @@ import { LoginScreen } from './screens/Login'
 import { ProgramsScreen } from './screens/Programs'
 import { ToolsScreen } from './screens/Tools'
 import { McpScreen } from './screens/Mcp'
+import { ScansScreen } from './screens/Scans'
 import { SettingsScreen } from './screens/Settings'
 
 type View = 'loading' | 'login' | 'app'
 
-export type Section = 'programs' | 'tools' | 'mcp' | 'settings'
+export type Section = 'programs' | 'scans' | 'tools' | 'mcp' | 'settings'
 
 const icon = {
   programs: (
@@ -31,6 +32,14 @@ const icon = {
         strokeWidth="1.7"
         strokeLinejoin="round"
       />
+    </svg>
+  ),
+  scans: (
+    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" strokeWidth="1.7" opacity="0.6" />
+      <path d="M12 12l5.2-5.2" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" />
     </svg>
   ),
   mcp: (
@@ -71,6 +80,7 @@ const icon = {
 
 const NAV: { id: Section; label: string; icon: ReactNode }[] = [
   { id: 'programs', label: 'Programmes', icon: icon.programs },
+  { id: 'scans', label: 'Scans', icon: icon.scans },
   { id: 'tools', label: 'Outils', icon: icon.tools },
   { id: 'mcp', label: 'Assistant', icon: icon.mcp },
   { id: 'settings', label: 'Réglages', icon: icon.settings }
@@ -138,6 +148,8 @@ export function App() {
     switch (id) {
       case 'programs':
         return <ProgramsScreen />
+      case 'scans':
+        return <ScansScreen />
       case 'tools':
         return <ToolsScreen />
       case 'mcp':

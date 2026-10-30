@@ -51,6 +51,12 @@ export interface ScanRow {
   finished_at: number | null
 }
 
+/** ScanRow enrichi par la jointure programmes (tableau de bord global). */
+export interface ScanOverviewRow extends ScanRow {
+  program_name: string | null
+  program_handle: string | null
+}
+
 export interface ScanEventRow {
   id: number
   scan_id: number
@@ -609,6 +615,21 @@ export class Repository {
     return this.db
       .prepare('SELECT * FROM scans WHERE program_id = ? ORDER BY id DESC LIMIT 100')
       .all(programId) as unknown as ScanRow[]
+  }
+
+  /**
+   * Tous les scans, du plus recent au plus ancien, avec l'identite du
+   * programme. Sert au tableau de bord global : sans lui, un scan lance
+   * depuis une fiche n'est plus consultable une fois la fiche fermee.
+   */
+  listAllScans(limit = 200): ScanOverviewRow[] {
+    return this.db
+      .prepare(
+        `SELECT s.*, p.name AS program_name, p.handle AS program_handle
+         FROM scans s LEFT JOIN programs p ON p.id = s.program_id
+         ORDER BY s.id DESC LIMIT ?`
+      )
+      .all(limit) as unknown as ScanOverviewRow[]
   }
 
   getScan(id: number): ScanRow | undefined {

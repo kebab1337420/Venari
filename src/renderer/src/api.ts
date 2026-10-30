@@ -36,6 +36,7 @@ import type {
   ProgramsQuery,
   ScanDepth,
   ScanEventsResult,
+  ScanListAllResult,
   ScanListResult,
   ScanStartResult,
   SecretCopyKind,
@@ -81,6 +82,7 @@ export const Api = {
     start: (programId: string, opts: { depth: ScanDepth; roeConfirm: boolean; rateLimit?: number }): Promise<ScanStartResult> =>
       window.bountydesk.scans.start(programId, opts),
     list: (programId: string): Promise<ScanListResult> => window.bountydesk.scans.list(programId),
+    listAll: (limit?: number): Promise<ScanListAllResult> => window.bountydesk.scans.listAll(limit),
     events: (scanId: number, afterSeq: number): Promise<ScanEventsResult> =>
       window.bountydesk.scans.events(scanId, afterSeq),
     stop: (scanId: number): Promise<DbResult> => window.bountydesk.scans.stop(scanId)

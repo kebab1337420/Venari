@@ -111,13 +111,6 @@ const bridge: BountyDeskBridge = {
     removeFromProgram: (programId: string, tagId: number) =>
       ipcRenderer.invoke(IPC.TagsRemoveFromProgram, { programId, tagId }),
   },
-  reports: {
-    list: () => ipcRenderer.invoke(IPC.ReportsList),
-    open: (programId: string, name: string) =>
-      ipcRenderer.invoke(IPC.ReportsOpen, { programId, name }),
-    reveal: (programId: string, name: string) =>
-      ipcRenderer.invoke(IPC.ReportsReveal, { programId, name }),
-  },
 }
 
 contextBridge.exposeInMainWorld('bountydesk', bridge)

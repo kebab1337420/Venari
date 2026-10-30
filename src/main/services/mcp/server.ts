@@ -1654,10 +1654,10 @@ const TOOL_DEFS: McpToolDef[] = [
     handler: async () => {
       const reports = listReports().slice(0, 200).map((r) => ({
         programId: r.programId,
-        path: r.relativePath,
+        path: r.path,
         name: r.name,
         size: r.size,
-        mtime: r.mtime,
+        updatedAt: r.updatedAt,
       }))
       return { text: JSON.stringify({ reports }, null, 2), details: { count: reports.length } }
     },

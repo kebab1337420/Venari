@@ -66,9 +66,6 @@ export const IPC = {
   AgentSessionEnd: 'agent:sessionEnd',
   AgentViewToken: 'agent:viewToken',
   SecretCopy: 'secret:copy',
-  ReportsList: 'reports:list',
-  ReportsOpen: 'reports:open',
-  ReportsReveal: 'reports:reveal'
 } as const
 
 export interface AuthStatus {
@@ -303,16 +300,6 @@ export type FindingsListResult = { ok: true; findings: FindingRecord[] } | DbFai
 export type FindingsStatsResult = { ok: true; stats: Record<string, number> } | DbFail
 
 export type FindingSaveResult = { ok: true; id: number } | DbFail
-
-export interface ReportEntry {
-  programId: string
-  relativePath: string
-  name: string
-  size: number
-  mtime: number
-}
-
-export type ReportsListResult = { ok: true; reports: ReportEntry[] } | DbFail
 
 export type ReportReadResult = { ok: true; content: string; truncated: boolean } | DbFail
 
@@ -592,9 +579,5 @@ export interface BountyDeskBridge {
     addToProgram(programId: string, tagId: number): Promise<DbResult>
     removeFromProgram(programId: string, tagId: number): Promise<DbResult>
   }
-  reports: {
-    list(): Promise<ReportsListResult>
-    open(programId: string, name: string): Promise<ReportOpenResult>
-    reveal(programId: string, name: string): Promise<ReportOpenResult>
-  }
+
 }

@@ -32,7 +32,7 @@ describe('reports', () => {
   it('liste uniquement les Markdown, un niveau de dossiers', () => {
     const reports = listReports()
     expect(reports).toHaveLength(2)
-    expect(reports.map((r) => r.relativePath).sort()).toEqual([
+    expect(reports.map((r) => r.path).sort()).toEqual([
       'prog_a/2026-01-01-xss.md',
       'prog_b/2026-02-01-idor.md',
     ])

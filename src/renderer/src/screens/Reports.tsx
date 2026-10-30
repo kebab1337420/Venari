@@ -43,7 +43,7 @@ export function ReportsScreen() {
 
   const open = async (report: ReportFile): Promise<void> => {
     try {
-      const r = await Api.reports.open(report.programId, report.name)
+      const r = await Api.reports.openFolder(report.path)
       if (!r.ok) setError(`Ouverture impossible : ${r.error ?? 'erreur inconnue'}`)
     } catch (e) {
       setError(`Ouverture impossible : ${e instanceof Error ? e.message : String(e)}`)
@@ -52,7 +52,7 @@ export function ReportsScreen() {
 
   const reveal = async (report: ReportFile): Promise<void> => {
     try {
-      const r = await Api.reports.reveal(report.programId, report.name)
+      const r = await Api.reports.openFolder(report.path)
       if (!r.ok) setError(`Dossier introuvable : ${r.error ?? 'erreur inconnue'}`)
     } catch (e) {
       setError(`Dossier introuvable : ${e instanceof Error ? e.message : String(e)}`)

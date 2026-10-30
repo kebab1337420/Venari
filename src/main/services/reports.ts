@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
-import type { ReportEntry } from '../../shared/ipc'
+import type { ReportFile } from '../../shared/ipc'
 
 /** Un rapport est un Markdown court ; au-dela on tronque plutot que de figer le renderer. */
 export const MAX_REPORT_BYTES = 512 * 1024
@@ -31,7 +31,7 @@ export function resolveReportPath(relativePath: string): string | null {
  * Un niveau de dossiers (un par programme), comme `submit_report` les ecrit.
  * Les fichiers parasites (sous-dossiers, non-Markdown) sont ignores.
  */
-export function listReports(): ReportEntry[] {
+export function listReports(): ReportFile[] {
   const root = reportsRoot()
   let programDirs: string[]
   try {
@@ -41,7 +41,7 @@ export function listReports(): ReportEntry[] {
   } catch {
     return []
   }
-  const out: ReportEntry[] = []
+  const out: ReportFile[] = []
   for (const programId of programDirs) {
     let files: string[]
     try {
@@ -56,17 +56,17 @@ export function listReports(): ReportEntry[] {
         const st = statSync(join(root, programId, name))
         out.push({
           programId,
-          relativePath: `${programId}/${name}`,
+          path: `${programId}/${name}`,
           name,
           size: st.size,
-          mtime: st.mtimeMs,
+          updatedAt: st.mtimeMs,
         })
       } catch {
         /* fichier supprime entre le readdir et le stat */
       }
     }
   }
-  return out.sort((a, b) => b.mtime - a.mtime)
+  return out.sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 export function readReport(relativePath: string): { ok: true; content: string; truncated: boolean } | { ok: false; error: string } {

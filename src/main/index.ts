@@ -9,6 +9,7 @@ import { registerScanIpc } from './ipc-scan'
 import { registerToolsIpc } from './ipc-tools'
 import { registerMcpIpc, restoreAutostartMcp } from './ipc-mcp'
 import { registerBrowserIpc } from './ipc-browser'
+import { registerReportsIpc } from './ipc-reports'
 import { installSecurity } from './security'
 import { closeDb, getRepository } from './db'
 import { purgeInstallResidues } from './services/tools/installer'
@@ -63,6 +64,7 @@ if (!gotLock) {
     registerMcpIpc()
     restoreAutostartMcp()
     registerBrowserIpc()
+    registerReportsIpc()
     purgeInstallResidues()
     // Un scan "running" datant d'un arrêt précédent ne peut plus progresser :
     // on le referme en erreur pour que l'UI cesse de l'attendre.

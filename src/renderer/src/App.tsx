@@ -8,6 +8,7 @@ import { FindingsScreen } from './screens/Findings'
 import { ReportsScreen } from './screens/Reports'
 import { ScansScreen } from './screens/Scans'
 import { SettingsScreen } from './screens/Settings'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 type View = 'loading' | 'login' | 'app'
 
@@ -226,7 +227,7 @@ export function App() {
       <main className="app-main">
         {visited.map((id) => (
           <div key={id} className={`screen ${section === id ? '' : 'screen-hidden'}`} aria-hidden={section !== id}>
-            {renderSection(id)}
+            <ErrorBoundary>{renderSection(id)}</ErrorBoundary>
           </div>
         ))}
       </main>

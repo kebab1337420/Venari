@@ -43,6 +43,7 @@ const ALL_TABLES = [
   'scan_events',
   'mcp_requests',
   'remote_sessions',
+  'findings',
 ]
 
 describe('migrations', () => {
@@ -111,6 +112,32 @@ describe('migrations', () => {
     ]) {
       expect(indexes.has(name)).toBe(true)
     }
+  })
+
+  it('v8 cree la table findings et ses index', () => {
+    const db = fresh()
+    migrate(db)
+    const indexes = schemaNames(db, 'index')
+    for (const name of ['idx_findings_program', 'idx_findings_status', 'idx_findings_updated']) {
+      expect(indexes.has(name)).toBe(true)
+    }
+    expect(columns(db, 'findings')).toEqual(
+      new Set([
+        'id',
+        'program_id',
+        'asset',
+        'title',
+        'severity',
+        'cvss',
+        'status',
+        'description',
+        'poc',
+        'report_path',
+        'scan_id',
+        'created_at',
+        'updated_at',
+      ]),
+    )
   })
 
   it('ne rejoue rien quand la base est deja a jour', () => {

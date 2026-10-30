@@ -30,6 +30,14 @@ export const IPC = {
   ScanList: 'scan:list',
   ScanEvents: 'scan:events',
   ScanStop: 'scan:stop',
+  FindingsList: 'findings:list',
+  FindingsStats: 'findings:stats',
+  FindingsCreate: 'findings:create',
+  FindingsUpdate: 'findings:update',
+  FindingsRemove: 'findings:remove',
+  ReportsList: 'reports:list',
+  ReportsRead: 'reports:read',
+  ReportsOpenFolder: 'reports:openFolder',
   ToolsList: 'tools:list',
   ToolsInstall: 'tools:install',
   ToolsInstallOutput: 'tools:install:output',
@@ -231,6 +239,71 @@ export type ScanListResult = { ok: true; scans: ScanRecord[] } | DbFail
 
 export type ScanEventsResult = { ok: true; events: ScanEvent[]; done: boolean } | DbFail
 
+export const FINDING_SEVERITIES = ['info', 'low', 'medium', 'high', 'critical'] as const
+
+export type FindingSeverity = (typeof FINDING_SEVERITIES)[number]
+
+export const FINDING_STATUSES = ['open', 'triaged', 'reported', 'fixed', 'duplicate', 'wontfix'] as const
+
+export type FindingStatus = (typeof FINDING_STATUSES)[number]
+
+export interface FindingRecord {
+  id: number
+  programId: string
+  programName: string
+  asset: string
+  title: string
+  severity: FindingSeverity
+  cvss: number | null
+  status: FindingStatus
+  description: string
+  poc: string
+  reportPath: string | null
+  scanId: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface FindingInput {
+  programId: string
+  asset: string
+  title: string
+  severity: FindingSeverity
+  cvss: number | null
+  status: FindingStatus
+  description: string
+  poc: string
+  reportPath: string | null
+  scanId: number | null
+}
+
+export interface FindingsQuery {
+  programId?: string
+  status?: FindingStatus
+  severity?: FindingSeverity
+  search?: string
+  limit?: number
+  offset?: number
+}
+
+export type FindingsListResult = { ok: true; findings: FindingRecord[] } | DbFail
+
+export type FindingsStatsResult = { ok: true; stats: Record<string, number> } | DbFail
+
+export type FindingSaveResult = { ok: true; id: number } | DbFail
+
+export interface ReportEntry {
+  programId: string
+  relativePath: string
+  name: string
+  size: number
+  mtime: number
+}
+
+export type ReportsListResult = { ok: true; reports: ReportEntry[] } | DbFail
+
+export type ReportReadResult = { ok: true; content: string; truncated: boolean } | DbFail
+
 export interface ToolEntry {
   id: string
   name: string
@@ -427,6 +500,18 @@ export interface BountyDeskBridge {
     list(programId: string): Promise<ScanListResult>
     events(scanId: number, afterSeq: number): Promise<ScanEventsResult>
     stop(scanId: number): Promise<DbResult>
+  }
+  findings: {
+    list(query: FindingsQuery): Promise<FindingsListResult>
+    stats(programId?: string): Promise<FindingsStatsResult>
+    create(input: FindingInput): Promise<FindingSaveResult>
+    update(id: number, patch: Partial<FindingInput>): Promise<DbResult>
+    remove(id: number): Promise<DbResult>
+  }
+  reports: {
+    list(): Promise<ReportsListResult>
+    read(relativePath: string): Promise<ReportReadResult>
+    openFolder(relativePath?: string): Promise<DbResult>
   }
   tools: {
     list(): Promise<ToolsListResult>

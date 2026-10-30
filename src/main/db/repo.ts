@@ -92,6 +92,45 @@ export interface RemoteSessionRow {
   ended_at: number | null
 }
 
+export interface FindingRow {
+  id: number
+  program_id: string
+  program_name: string
+  asset: string
+  title: string
+  severity: string
+  cvss: number | null
+  status: string
+  description: string
+  poc: string
+  report_path: string | null
+  scan_id: number | null
+  created_at: number
+  updated_at: number
+}
+
+export interface FindingInput {
+  programId: string
+  asset: string
+  title: string
+  severity: string
+  cvss: number | null
+  status?: string
+  description: string
+  poc: string
+  scanId: number | null
+  reportPath: string | null
+}
+
+export interface FindingFilter {
+  programId?: string
+  status?: string
+  severity?: string
+  search?: string
+  limit?: number
+  offset?: number
+}
+
 export interface ProgramQuery {
   search?: string
   favoriteOnly?: boolean
@@ -754,6 +793,168 @@ export class Repository {
     return this.db
       .prepare('SELECT * FROM remote_sessions ORDER BY id DESC LIMIT ?')
       .all(limit) as unknown as RemoteSessionRow[]
+  }
+
+  private static readonly FINDING_COLUMNS = `
+    f.id, f.program_id, p.name AS program_name, f.asset, f.title, f.severity,
+    f.cvss, f.status, f.description, f.poc, f.report_path, f.scan_id,
+    f.created_at, f.updated_at
+  `
+
+  createFinding(input: FindingInput): number {
+    const now = Date.now()
+    const info = this.db
+      .prepare(
+        `INSERT INTO findings (
+           program_id, asset, title, severity, cvss, status, description, poc, report_path, scan_id,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.programId,
+        input.asset,
+        input.title,
+        input.severity,
+        input.cvss,
+        input.status ?? 'open',
+        input.description,
+        input.poc,
+        input.reportPath,
+        input.scanId,
+        now,
+        now,
+      )
+    return Number(info.lastInsertRowid)
+  }
+
+  getFinding(id: number): FindingRow | undefined {
+    return this.db
+      .prepare(
+        `SELECT ${Repository.FINDING_COLUMNS} FROM findings f JOIN programs p ON p.id = f.program_id WHERE f.id = ?`,
+      )
+      .get(id) as unknown as FindingRow | undefined
+  }
+
+  /**
+   * Filtres combinables, tous bornes a 500 lignes : un suivi de chasse ne
+   * depasse pas quelques centaines de findings, et une limite en dur evite
+   * qu'une recherche vide ramene toute la table dans le renderer.
+   */
+  listFindings(filter: FindingFilter = {}): FindingRow[] {
+    const clauses: string[] = []
+    const params: Array<string | number> = []
+    if (filter.programId) {
+      clauses.push('f.program_id = ?')
+      params.push(filter.programId)
+    }
+    if (filter.status) {
+      clauses.push('f.status = ?')
+      params.push(filter.status)
+    }
+    if (filter.severity) {
+      clauses.push('f.severity = ?')
+      params.push(filter.severity)
+    }
+    if (filter.search && filter.search.trim() !== '') {
+      const like = likeContains(filter.search.trim())
+      clauses.push(
+        "(f.title LIKE ? ESCAPE '\\' COLLATE NOCASE OR f.asset LIKE ? ESCAPE '\\' COLLATE NOCASE OR f.description LIKE ? ESCAPE '\\' COLLATE NOCASE)",
+      )
+      params.push(like, like, like)
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : ''
+    const limit = Math.min(Math.max(filter.limit ?? 500, 1), 500)
+    const offset = Math.max(filter.offset ?? 0, 0)
+    return this.db
+      .prepare(
+        `SELECT ${Repository.FINDING_COLUMNS}
+         FROM findings f JOIN programs p ON p.id = f.program_id
+         ${where}
+         ORDER BY f.updated_at DESC, f.id DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(...params, limit, offset) as unknown as FindingRow[]
+  }
+
+  updateFinding(
+    id: number,
+    patch: {
+      asset?: string
+      title?: string
+      severity?: string
+      cvss?: number | null
+      status?: string
+      description?: string
+      poc?: string
+      reportPath?: string | null
+    },
+  ): void {
+    const sets: string[] = []
+    const vals: Array<string | number | null> = []
+    const cols: [keyof typeof patch, string][] = [
+      ['asset', 'asset'],
+      ['title', 'title'],
+      ['severity', 'severity'],
+      ['cvss', 'cvss'],
+      ['status', 'status'],
+      ['description', 'description'],
+      ['poc', 'poc'],
+      ['reportPath', 'report_path'],
+    ]
+    for (const [key, col] of cols) {
+      const val = patch[key]
+      if (val !== undefined) {
+        sets.push(`${col} = ?`)
+        vals.push(val as string | number | null)
+      }
+    }
+    if (sets.length === 0) throw new Error('Aucun champ à mettre à jour')
+    const info = this.db
+      .prepare(`UPDATE findings SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`)
+      .run(...vals, Date.now(), id)
+    if (Number(info.changes) === 0) throw new Error(`Finding introuvable (id=${id})`)
+  }
+
+  removeFinding(id: number): void {
+    const info = this.db.prepare('DELETE FROM findings WHERE id = ?').run(id)
+    if (Number(info.changes) === 0) throw new Error(`Finding introuvable (id=${id})`)
+  }
+
+  /**
+   * Compteurs par statut pour le bandeau du suivi. Optionnellement borne a un
+   * programme, pour l'afficher aussi dans le detail.
+   */
+  findingStats(programId?: string): Record<string, number> {
+    const rows = (programId
+      ? this.db.prepare('SELECT status, COUNT(*) AS n FROM findings WHERE program_id = ? GROUP BY status').all(programId)
+      : this.db.prepare('SELECT status, COUNT(*) AS n FROM findings GROUP BY status').all()) as unknown as Array<{
+      status: string
+      n: number
+    }>
+    const stats: Record<string, number> = { total: 0 }
+    for (const r of rows) {
+      stats[r.status] = r.n
+      stats.total = (stats.total ?? 0) + r.n
+    }
+    return stats
+  }
+
+  /**
+   * Candidat doublon : meme programme, meme cible et meme titre a la casse et
+   * aux espaces pres. Utilise par record_finding pour ne pas empiler le meme
+   * constat a chaque re-scan.
+   */
+  findDuplicateFinding(programId: string, asset: string, title: string): FindingRow | undefined {
+    return this.db
+      .prepare(
+        `SELECT ${Repository.FINDING_COLUMNS}
+         FROM findings f JOIN programs p ON p.id = f.program_id
+         WHERE f.program_id = ?
+           AND lower(trim(f.asset)) = lower(trim(?))
+           AND lower(trim(f.title)) = lower(trim(?))
+         ORDER BY f.id DESC LIMIT 1`,
+      )
+      .get(programId, asset, title) as unknown as FindingRow | undefined
   }
 }
 

@@ -33,6 +33,18 @@ const bridge: BountyDeskBridge = {
     events: (scanId: number, afterSeq: number) => ipcRenderer.invoke(IPC.ScanEvents, { scanId, afterSeq }),
     stop: (scanId: number) => ipcRenderer.invoke(IPC.ScanStop, scanId),
   },
+  findings: {
+    list: (query) => ipcRenderer.invoke(IPC.FindingsList, query),
+    stats: (programId?: string) => ipcRenderer.invoke(IPC.FindingsStats, programId),
+    create: (input) => ipcRenderer.invoke(IPC.FindingsCreate, input),
+    update: (id: number, patch) => ipcRenderer.invoke(IPC.FindingsUpdate, { id, patch }),
+    remove: (id: number) => ipcRenderer.invoke(IPC.FindingsRemove, id),
+  },
+  reports: {
+    list: () => ipcRenderer.invoke(IPC.ReportsList),
+    read: (relativePath: string) => ipcRenderer.invoke(IPC.ReportsRead, relativePath),
+    openFolder: (relativePath?: string) => ipcRenderer.invoke(IPC.ReportsOpenFolder, relativePath),
+  },
   tools: {
     list: () => ipcRenderer.invoke(IPC.ToolsList),
     install: (id: string) => ipcRenderer.invoke(IPC.ToolsInstall, id),

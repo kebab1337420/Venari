@@ -6,6 +6,7 @@ import { registerIpc } from './ipc'
 import { registerProgramsIpc } from './ipc-programs'
 import { registerDetailIpc } from './ipc-detail'
 import { registerScanIpc } from './ipc-scan'
+import { registerFindingsIpc } from './ipc-findings'
 import { registerToolsIpc } from './ipc-tools'
 import { registerMcpIpc, restoreAutostartMcp } from './ipc-mcp'
 import { registerBrowserIpc } from './ipc-browser'
@@ -59,6 +60,7 @@ if (!gotLock) {
     registerProgramsIpc()
     registerDetailIpc()
     registerScanIpc()
+    registerFindingsIpc()
     registerToolsIpc()
     registerMcpIpc()
     restoreAutostartMcp()

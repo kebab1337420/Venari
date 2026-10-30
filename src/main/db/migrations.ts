@@ -174,4 +174,32 @@ export const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 8,
+    up(db) {
+      // Suivi de findings : la piece manquante entre les scans et les rapports.
+      // `report_path` pointe un fichier de userData/reports (relatif) ; la
+      // suppression du programme emporte ses findings, comme le reste.
+      db.exec(`
+        CREATE TABLE findings (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          program_id  TEXT NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+          asset       TEXT NOT NULL DEFAULT '',
+          title       TEXT NOT NULL,
+          severity    TEXT NOT NULL DEFAULT 'info',
+          cvss        REAL,
+          status      TEXT NOT NULL DEFAULT 'open',
+          description TEXT NOT NULL DEFAULT '',
+          poc         TEXT NOT NULL DEFAULT '',
+          report_path TEXT,
+          scan_id     INTEGER,
+          created_at  INTEGER NOT NULL,
+          updated_at  INTEGER NOT NULL
+        );
+        CREATE INDEX idx_findings_program ON findings(program_id);
+        CREATE INDEX idx_findings_status ON findings(status);
+        CREATE INDEX idx_findings_updated ON findings(updated_at DESC);
+      `)
+    },
+  },
 ]

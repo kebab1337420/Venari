@@ -560,9 +560,9 @@ export function unsafeArchiveEntry(entry: string): string | null {
 }
 
 /** Refuse une archive dont une entree s'echapperait du dossier de destination.
- *  --force-local : les chemins d'acces sous Windows (ex. C:\Users\...) portent
- *  un ':' que GNU tar interprète comme un host distant ; l'option force la lecture
- *  locale et est ignorée par bsdtar (Windows 10+). */
+ *  listArchiveEntries ajoute --force-local au tar de GNU pour les chemins
+ *  contenant un ':' (lecteur Windows) ; bsdtar (Windows 10+) gerant les
+ *  lettres de lecteur nativement.
 export async function assertStaysInside(archive: string): Promise<void> {
   const entries = await listArchiveEntries(archive)
   // Echec ferme : si on ne peut pas lister l'archive, on ne peut pas garantir

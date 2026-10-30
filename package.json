@@ -1,6 +1,6 @@
 {
   "name": "bountydesk",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Venari - bureau du chercheur Intigriti",
   "main": "./out/main/index.js",
   "author": "whitehat <kebab1337420@users.noreply.github.com>",

@@ -25,3 +25,15 @@ export function resolveWebTarget(endpoint: string): URL | null {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
   return url
 }
+
+/**
+ * Résolution d'un endpoint vers une cible réellement scannable. Un endpoint
+ * générique (`*.example.com`) reste utile pour valider le scope, mais curl et
+ * nuclei ne résolvent pas un `*` : l'envoyer tel quel ne teste rien et produit
+ * une erreur DNS. On l'écarte donc des cibles de scan.
+ */
+export function resolveScannableTarget(endpoint: string): URL | null {
+  const url = resolveWebTarget(endpoint)
+  if (!url) return null
+  return url.hostname.includes('*') ? null : url
+}

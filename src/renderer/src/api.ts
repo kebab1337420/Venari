@@ -40,9 +40,11 @@ import type {
   ProgramsPage,
   ProgramsQuery,
   ReportReadResult,
+  ReportOpenResult,
   ReportsListResult,
   ScanDepth,
   ScanEventsResult,
+  ScanListAllResult,
   ScanListResult,
   ScanStartResult,
   SecretCopyKind,
@@ -88,6 +90,7 @@ export const Api = {
     start: (programId: string, opts: { depth: ScanDepth; roeConfirm: boolean; rateLimit?: number }): Promise<ScanStartResult> =>
       window.bountydesk.scans.start(programId, opts),
     list: (programId: string): Promise<ScanListResult> => window.bountydesk.scans.list(programId),
+    listAll: (limit?: number): Promise<ScanListAllResult> => window.bountydesk.scans.listAll(limit),
     events: (scanId: number, afterSeq: number): Promise<ScanEventsResult> =>
       window.bountydesk.scans.events(scanId, afterSeq),
     stop: (scanId: number): Promise<DbResult> => window.bountydesk.scans.stop(scanId)
@@ -166,5 +169,12 @@ export const Api = {
       window.bountydesk.tags.addToProgram(programId, tagId),
     removeFromProgram: (programId: string, tagId: number): Promise<DbResult> =>
       window.bountydesk.tags.removeFromProgram(programId, tagId)
+  },
+  reports: {
+    list: (): Promise<ReportsListResult> => window.bountydesk.reports.list(),
+    open: (programId: string, name: string): Promise<ReportOpenResult> =>
+      window.bountydesk.reports.open(programId, name),
+    reveal: (programId: string, name: string): Promise<ReportOpenResult> =>
+      window.bountydesk.reports.reveal(programId, name)
   }
 }

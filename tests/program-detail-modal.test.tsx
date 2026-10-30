@@ -103,6 +103,13 @@ describe('ProgramDetailModal', () => {
     expect(screen.queryByText('Chargement du détail…')).toBeNull()
   })
 
+  it('sort du chargement quand l appel IPC rejette', async () => {
+    detail.mockRejectedValue(new Error('pont IPC coupe'))
+    renderModal()
+    expect(await screen.findByText('Détail du programme indisponible.')).toBeTruthy()
+    expect(screen.queryByText('Chargement du détail…')).toBeNull()
+  })
+
   it('signale un scope vide', async () => {
     detail.mockResolvedValue({ ok: true, detail: detailData() })
     renderModal()

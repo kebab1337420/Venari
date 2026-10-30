@@ -130,18 +130,31 @@ export function ToolsScreen() {
 
     const runOne = async (id: string): Promise<void> => {
       setInstallState((prev) => ({ ...prev, [id]: { status: 'running', output: '', error: '' } }))
-      const res = await Api.tools.install(id)
-      setInstallState((prev) => ({
-        ...prev,
-        [id]:
-          res.ok && res.installed
-            ? { status: 'ok', output: res.output, error: '' }
-            : {
-                status: 'error',
-                output: res.output,
-                error: res.ok ? 'Binaire non détecté après installation.' : res.error
-              }
-      }))
+      try {
+        const res = await Api.tools.install(id)
+        setInstallState((prev) => ({
+          ...prev,
+          [id]:
+            res.ok && res.installed
+              ? { status: 'ok', output: res.output, error: '' }
+              : {
+                  status: 'error',
+                  output: res.output,
+                  error: res.ok ? 'Binaire non détecté après installation.' : res.error
+                }
+        }))
+      } catch (err) {
+        // Un rejet IPC ne doit pas laisser l'état sur « running » : le bouton
+        // resterait désactivé et l'interface bloquée jusqu'au redémarrage.
+        setInstallState((prev) => ({
+          ...prev,
+          [id]: {
+            status: 'error',
+            output: prev[id]?.output ?? '',
+            error: `Installation interrompue : ${err instanceof Error ? err.message : String(err)}`
+          }
+        }))
+      }
     }
 
     const lane = (ids: string[], width: number): Promise<void> => {
@@ -267,14 +280,19 @@ export function ToolsScreen() {
               if (!token) return
               setBusy(true)
               setGhMsg('')
-              const res = await Api.tools.githubTokenSet(token)
-              if (res.ok) {
-                setGhConfigured(true)
-                setGhToken('')
-              } else {
-                setGhMsg(res.error)
+              try {
+                const res = await Api.tools.githubTokenSet(token)
+                if (res.ok) {
+                  setGhConfigured(true)
+                  setGhToken('')
+                } else {
+                  setGhMsg(res.error)
+                }
+              } catch (err) {
+                setGhMsg(`Enregistrement du jeton impossible : ${err instanceof Error ? err.message : String(err)}`)
+              } finally {
+                setBusy(false)
               }
-              setBusy(false)
             }}
           >
             Enregistrer
@@ -286,9 +304,14 @@ export function ToolsScreen() {
               onClick={async () => {
                 setBusy(true)
                 setGhMsg('')
-                await Api.tools.githubTokenClear()
-                setGhConfigured(false)
-                setBusy(false)
+                try {
+                  await Api.tools.githubTokenClear()
+                  setGhConfigured(false)
+                } catch (err) {
+                  setGhMsg(`Retrait du jeton impossible : ${err instanceof Error ? err.message : String(err)}`)
+                } finally {
+                  setBusy(false)
+                }
               }}
             >
               Retirer

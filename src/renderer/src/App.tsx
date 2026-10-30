@@ -5,11 +5,13 @@ import { ProgramsScreen } from './screens/Programs'
 import { ToolsScreen } from './screens/Tools'
 import { McpScreen } from './screens/Mcp'
 import { FindingsScreen } from './screens/Findings'
+import { ReportsScreen } from './screens/Reports'
+import { ScansScreen } from './screens/Scans'
 import { SettingsScreen } from './screens/Settings'
 
 type View = 'loading' | 'login' | 'app'
 
-export type Section = 'programs' | 'findings' | 'tools' | 'mcp' | 'settings'
+export type Section = 'programs' | 'findings' | 'scans' | 'reports' | 'tools' | 'mcp' | 'settings'
 
 const icon = {
   programs: (
@@ -44,6 +46,26 @@ const icon = {
         strokeWidth="1.7"
         strokeLinejoin="round"
       />
+    </svg>
+  ),
+  scans: (
+    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" strokeWidth="1.7" opacity="0.6" />
+      <path d="M12 12l5.2-5.2" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+    </svg>
+  ),
+  reports: (
+    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+      <path
+        d="M6 3.6h8l4 4V20a.4.4 0 0 1-.4.4H6.4A.4.4 0 0 1 6 20V4a.4.4 0 0 1 .4-.4z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M14 3.6V8h4.2M9 12h6M9 15.5h6M9 8.5h2" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   ),
   mcp: (
@@ -85,6 +107,8 @@ const icon = {
 const NAV: { id: Section; label: string; icon: ReactNode }[] = [
   { id: 'programs', label: 'Programmes', icon: icon.programs },
   { id: 'findings', label: 'Findings', icon: icon.findings },
+  { id: 'scans', label: 'Scans', icon: icon.scans },
+  { id: 'reports', label: 'Rapports', icon: icon.reports },
   { id: 'tools', label: 'Outils', icon: icon.tools },
   { id: 'mcp', label: 'Assistant', icon: icon.mcp },
   { id: 'settings', label: 'Réglages', icon: icon.settings }
@@ -154,6 +178,10 @@ export function App() {
         return <ProgramsScreen />
       case 'findings':
         return <FindingsScreen />
+      case 'scans':
+        return <ScansScreen />
+      case 'reports':
+        return <ReportsScreen />
       case 'tools':
         return <ToolsScreen />
       case 'mcp':

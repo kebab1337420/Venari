@@ -8,6 +8,7 @@ const hoisted = vi.hoisted(() => ({
   repo: {
     createScan: vi.fn<(arg: unknown) => number>(),
     listScans: vi.fn<(programId: string) => unknown[]>(),
+    listAllScans: vi.fn<(limit: number) => unknown[]>(),
     getScan: vi.fn<(id: number) => unknown>(),
     listScanEvents: vi.fn<(id: number, after: number) => unknown[]>(),
   },
@@ -87,6 +88,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   hoisted.repo.createScan.mockReturnValue(42)
   hoisted.repo.listScans.mockReturnValue([])
+  hoisted.repo.listAllScans.mockReturnValue([])
   hoisted.repo.getScan.mockReturnValue(undefined)
   hoisted.repo.listScanEvents.mockReturnValue([])
   hoisted.client.getToken.mockReturnValue('tok')
@@ -214,6 +216,82 @@ describe('ScanEvents', () => {
     hoisted.repo.getScan.mockReturnValue(undefined)
     const res = call(IPC.ScanEvents, { scanId: 99, afterSeq: 0 })
     expect(res).toMatchObject({ ok: false })
+  })
+})
+
+describe('ScanListAll (tableau de bord global)', () => {
+  it('joint le nom du programme et renvoie les scans du plus recent au plus ancien', () => {
+    hoisted.repo.listAllScans.mockReturnValue([
+      {
+        id: 9,
+        program_id: 'p1',
+        depth: 'med',
+        status: 'running',
+        rate_limit: 5,
+        roe_confirm: 1,
+        started_at: 1000,
+        finished_at: null,
+        program_name: 'Acme Corp',
+        program_handle: 'acme',
+      },
+    ])
+    const res = call(IPC.ScanListAll, undefined)
+    expect(res).toEqual({
+      ok: true,
+      scans: [
+        {
+          id: 9,
+          programId: 'p1',
+          depth: 'med',
+          status: 'running',
+          rateLimit: 5,
+          roeConfirm: true,
+          startedAt: 1000,
+          finishedAt: null,
+          programName: 'Acme Corp',
+          programHandle: 'acme',
+        },
+      ],
+    })
+    expect(hoisted.repo.listAllScans).toHaveBeenCalledWith(200)
+  })
+
+  it('replie sur l id du programme quand la fiche a disparu', () => {
+    hoisted.repo.listAllScans.mockReturnValue([
+      {
+        id: 3,
+        program_id: 'orphelin',
+        depth: 'low',
+        status: 'done',
+        rate_limit: 1,
+        roe_confirm: 0,
+        started_at: 0,
+        finished_at: 10,
+        program_name: null,
+        program_handle: null,
+      },
+    ])
+    const res = call(IPC.ScanListAll, undefined) as { scans: { programName: string; programHandle: string }[] }
+    expect(res.scans[0]).toMatchObject({ programName: 'orphelin', programHandle: '' })
+  })
+
+  it('respecte la limite demandee', () => {
+    call(IPC.ScanListAll, 25)
+    expect(hoisted.repo.listAllScans).toHaveBeenCalledWith(25)
+  })
+
+  it('refuse une limite hors bornes', () => {
+    const res = call(IPC.ScanListAll, 0)
+    expect(res).toMatchObject({ ok: false })
+    expect(hoisted.repo.listAllScans).not.toHaveBeenCalled()
+  })
+
+  it('renvoie une erreur quand la base echoue', () => {
+    hoisted.repo.listAllScans.mockImplementation(() => {
+      throw new Error('db verrouillee')
+    })
+    const res = call(IPC.ScanListAll, undefined)
+    expect(res).toEqual({ ok: false, error: 'db verrouillee' })
   })
 })
 

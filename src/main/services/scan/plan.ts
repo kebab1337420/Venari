@@ -1,6 +1,6 @@
 import { isIP } from 'node:net'
 import type { ScanDepth, ScopeDomain } from '../../../shared/ipc'
-import { resolveWebTarget } from '../../../shared/scan-targets'
+import { resolveScannableTarget, resolveWebTarget } from '../../../shared/scan-targets'
 
 export const SCAN_DEPTHS: ScanDepth[] = ['low', 'med', 'high']
 
@@ -72,7 +72,7 @@ export function selectTargets(scope: ScopeDomain[]): string[] {
   const out: string[] = []
   for (const d of scope) {
     if (!d.inScope) continue
-    const u = resolveWebTarget(d.endpoint)
+    const u = resolveScannableTarget(d.endpoint)
     if (!u) continue
     if (isPrivateHost(u.hostname)) continue
     const norm = u.origin + u.pathname.replace(/\/+$/, '')

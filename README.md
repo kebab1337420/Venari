@@ -127,6 +127,11 @@ Le port MCP n'est volontairement pas vérifié par les jobs de smoke test : le s
 - **Garde-fous** : cibles limitées au scope **in-scope** et aux endpoints HTTP(S) ; la confirmation ROE (`roeConfirm`) est **requise** depuis l'interface (le scan ne démarre qu'après validation manuelle — seule l'outil MCP `start_scan` peut la rendre optionnelle) ; les ROE restent respectées (si `automatedTooling: 0`, le scan est refusé) ; rate limit par scan ; bouton **Arrêter** toujours disponible ; tout est loggé dans `scan_events` ; exécution séquentielle, arrêt propre du process courant. Aucune soumission automatique : les rapports sont rédigés localement (`submit_report`).
 - Si **aucun** outil du plan n'a pu être lancé, le scan se termine en `error` avec la liste des binaires manquants — il ne se présente jamais comme réussi.
 - **Un scan ne peut pas rester bloqué** : chaque étape a un plafond de 30 min (au-delà, l'outil est arrêté et le scan le dit), le flux est plafonné à 5 000 événements par scan (la troncature est annoncée, jamais silencieuse), et le bouton **Arrêter** tue l'outil *et* ses sous-processus — ffuf ou nuclei lancent des enfants, sans cela un scan orphelin continuerait après l'arrêt.
+- **Tableau de bord Scans** (menu **Scans**) : tous les scans, tous programmes confondus, avec programme, profondeur, statut, début et durée. La liste se rafraîchit automatiquement tant qu'un scan tourne, et le journal live + le bouton **Arrêter** restent accessibles même après avoir fermé la fiche du programme.
+
+### Rapports
+- **Écran Rapports** : les rapports Markdown écrits par `submit_report` (dossier `reports/` du dossier de données) sont listés dans l'app, filtrables par fichier/programme, avec date, taille, **Ouvrir** et **Dossier**. Aucun chemin n'est fourni par le renderer : seul un couple (programme, fichier) validé est résolu côté processus principal.
+- Rien n'est soumis automatiquement à la plateforme : l'API chercheur d'Intigriti reste en lecture seule.
 
 ### Outils
 

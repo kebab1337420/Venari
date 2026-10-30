@@ -43,6 +43,10 @@ const ProgramRow = memo(function ProgramRow({
   onRemoveTag
 }: RowProps) {
   const openFromKeyboard = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    // Seule la ligne elle-même ouvre le détail : sans ce garde-fou, Entrée ou
+    // Espace sur un bouton imbriqué (retrait de tag) déclenchait aussi la
+    // navigation, en plus de l'action du bouton.
+    if (e.target !== e.currentTarget) return
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       onOpenDetail(p)
@@ -82,7 +86,12 @@ const ProgramRow = memo(function ProgramRow({
               <button
                 key={t}
                 className="tag"
-                onClick={() => onRemoveTag(p, t)}
+                onClick={(e) => {
+                  // Le tag est dans la zone cliquable de la ligne : sans ça,
+                  // retirer un tag ouvrait aussi le détail du programme.
+                  e.stopPropagation()
+                  onRemoveTag(p, t)
+                }}
                 title="Retirer le tag"
               >
                 #{t} ✕
@@ -399,7 +408,10 @@ export function ProgramsScreen() {
     const name = editingGroupName.trim()
     if (!name) return
     setEditingGroupId(null)
-    void runMutation(() => Api.groups.rename(id, name))
+    void runMutation(async () => {
+      const r = await Api.groups.rename(id, name)
+      if (!r.ok) throw new Error(r.error)
+    })
   }
 
   const removeGroup = (id: number): void => {
@@ -431,14 +443,20 @@ export function ProgramsScreen() {
 
   const addToGroup = useCallback(
     (p: ProgramSummary, groupId: number): void => {
-      void runMutation(() => Api.groups.addMember(groupId, p.id))
+      void runMutation(async () => {
+        const r = await Api.groups.addMember(groupId, p.id)
+        if (!r.ok) throw new Error(r.error)
+      })
     },
     [runMutation]
   )
 
   const addTagToProgram = useCallback(
     (p: ProgramSummary, tagId: number): void => {
-      void runMutation(() => Api.tags.addToProgram(p.id, tagId))
+      void runMutation(async () => {
+        const r = await Api.tags.addToProgram(p.id, tagId)
+        if (!r.ok) throw new Error(r.error)
+      })
     },
     [runMutation]
   )
@@ -446,7 +464,11 @@ export function ProgramsScreen() {
   const removeTagFromProgram = useCallback(
     (p: ProgramSummary, tagName: string): void => {
       const tag = tags.find((tg) => tg.name === tagName)
-      if (tag) void runMutation(() => Api.tags.removeFromProgram(p.id, tag.id))
+      if (tag)
+        void runMutation(async () => {
+          const r = await Api.tags.removeFromProgram(p.id, tag.id)
+          if (!r.ok) throw new Error(r.error)
+        })
     },
     [runMutation, tags]
   )

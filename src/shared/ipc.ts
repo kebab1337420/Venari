@@ -28,6 +28,7 @@ export const IPC = {
   BrowserOpen: 'browser:open',
   ScanStart: 'scan:start',
   ScanList: 'scan:list',
+  ScanListAll: 'scan:listAll',
   ScanEvents: 'scan:events',
   ScanStop: 'scan:stop',
   FindingsList: 'findings:list',
@@ -64,7 +65,10 @@ export const IPC = {
   AgentSessionDecide: 'agent:sessionDecide',
   AgentSessionEnd: 'agent:sessionEnd',
   AgentViewToken: 'agent:viewToken',
-  SecretCopy: 'secret:copy'
+  SecretCopy: 'secret:copy',
+  ReportsList: 'reports:list',
+  ReportsOpen: 'reports:open',
+  ReportsReveal: 'reports:reveal'
 } as const
 
 export interface AuthStatus {
@@ -236,6 +240,14 @@ export interface ScanEvent {
 export type ScanStartResult = { ok: true; scanId: number } | DbFail
 
 export type ScanListResult = { ok: true; scans: ScanRecord[] } | DbFail
+
+/** Scan + identite du programme : le tableau de bord est global, pas filtre. */
+export interface ScanOverview extends ScanRecord {
+  programName: string
+  programHandle: string
+}
+
+export type ScanListAllResult = { ok: true; scans: ScanOverview[] } | DbFail
 
 export type ScanEventsResult = { ok: true; events: ScanEvent[]; done: boolean } | DbFail
 
@@ -469,6 +481,19 @@ export type SecretCopyResult = { ok: true } | DbFail
 
 export type CredentialRevealResult = { ok: true; secret: string } | DbFail
 
+/** Rapport Markdown ecrit par `submit_report` (dossier de donnees Venari). */
+export interface ReportFile {
+  programId: string
+  name: string
+  path: string
+  size: number
+  updatedAt: number
+}
+
+export type ReportsListResult = { ok: true; reports: ReportFile[] } | DbFail
+
+export type ReportOpenResult = { ok: boolean; error?: string }
+
 export interface BountyDeskBridge {
   auth: {
     getStatus(): Promise<AuthStatus>
@@ -498,6 +523,7 @@ export interface BountyDeskBridge {
   scans: {
     start(programId: string, opts: { depth: ScanDepth; roeConfirm: boolean; rateLimit?: number }): Promise<ScanStartResult>
     list(programId: string): Promise<ScanListResult>
+    listAll(limit?: number): Promise<ScanListAllResult>
     events(scanId: number, afterSeq: number): Promise<ScanEventsResult>
     stop(scanId: number): Promise<DbResult>
   }
@@ -565,5 +591,10 @@ export interface BountyDeskBridge {
     remove(id: number): Promise<DbResult>
     addToProgram(programId: string, tagId: number): Promise<DbResult>
     removeFromProgram(programId: string, tagId: number): Promise<DbResult>
+  }
+  reports: {
+    list(): Promise<ReportsListResult>
+    open(programId: string, name: string): Promise<ReportOpenResult>
+    reveal(programId: string, name: string): Promise<ReportOpenResult>
   }
 }

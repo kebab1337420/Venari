@@ -23,11 +23,17 @@ export function ProgramDetailModal({ program, onClose }: Props) {
 
   useEffect(() => {
     let alive = true
-    void Api.programs.detail(program.id).then((r) => {
-      if (!alive) return
-      if (r.ok) setDetail(r.detail)
-      else setError(r.error)
-    })
+    void Api.programs.detail(program.id)
+      .then((r) => {
+        if (!alive) return
+        if (r.ok) setDetail(r.detail)
+        else setError(r.error)
+      })
+      .catch(() => {
+        // Un rejet IPC laisserait sinon la modale bloquee sur « Chargement du
+        // detail. » sans aucun moyen de comprendre l'echec.
+        if (alive) setError('Détail du programme indisponible.')
+      })
     return () => {
       alive = false
     }

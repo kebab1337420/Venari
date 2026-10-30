@@ -124,6 +124,19 @@ export function App() {
   const [statusError, setStatusError] = useState(false)
 
   useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      const map: Record<string, Section> = { '1': 'programs', '2': 'findings', '3': 'scans', '4': 'reports', '5': 'tools', '6': 'mcp', '7': 'settings' }
+      const id = map[e.key]
+      if (id) { e.preventDefault(); goto(id) }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
     setStatusError(false)
     void Api.auth.status()

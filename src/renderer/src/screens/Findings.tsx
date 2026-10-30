@@ -7,7 +7,7 @@ import {
   type FindingSeverity,
   type FindingStatus,
   type ProgramSummary,
-  type ReportEntry,
+  type ReportFile,
 } from '../../../shared/ipc'
 import { Api } from '../api'
 import { Modal } from '../components/Modal'
@@ -62,7 +62,7 @@ export function FindingsScreen() {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<FindingRecord | 'new' | null>(null)
 
-  const [reports, setReports] = useState<ReportEntry[]>([])
+  const [reports, setReports] = useState<ReportFile[]>([])
   const [reportPath, setReportPath] = useState<string | null>(null)
   const [reportText, setReportText] = useState('')
   const [reportTruncated, setReportTruncated] = useState(false)
@@ -101,11 +101,11 @@ export function FindingsScreen() {
     if (tab === 'reports') refreshReports()
   }, [tab, refreshReports])
 
-  const openReport = (entry: ReportEntry): void => {
-    setReportPath(entry.relativePath)
+  const openReport = (entry: ReportFile): void => {
+    setReportPath(entry.path)
     setReportText('Chargement…')
     void Api.reports
-      .read(entry.relativePath)
+      .read(entry.path)
       .then((r) => {
         if (r.ok) {
           setReportText(r.content)
@@ -273,10 +273,10 @@ export function FindingsScreen() {
                           setTimeout(refreshReports, 0)
                           openReport({
                             programId: f.programId,
-                            relativePath: f.reportPath!,
+                            path: f.reportPath!,
                             name: f.reportPath!.split('/').pop() ?? '',
                             size: 0,
-                            mtime: f.updatedAt,
+                            updatedAt: f.updatedAt,
                           })
                         }}
                       >
@@ -303,13 +303,13 @@ export function FindingsScreen() {
             ) : (
               reports.map((r) => (
                 <button
-                  key={r.relativePath}
-                  className={`report-item ${reportPath === r.relativePath ? 'active' : ''}`}
+                  key={r.path}
+                  className={`report-item ${reportPath === r.path ? 'active' : ''}`}
                   onClick={() => openReport(r)}
                 >
                   <span className="report-name">{r.name}</span>
                   <span className="muted">
-                    {r.programId} · {fmtSize(r.size)} · {fmtDate(r.mtime)}
+                    {r.programId} · {fmtSize(r.size)} · {fmtDate(r.updatedAt)}
                   </span>
                 </button>
               ))

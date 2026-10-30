@@ -106,7 +106,9 @@ export const Api = {
   reports: {
     list: (): Promise<ReportsListResult> => window.bountydesk.reports.list(),
     read: (relativePath: string): Promise<ReportReadResult> => window.bountydesk.reports.read(relativePath),
-    openFolder: (relativePath?: string): Promise<DbResult> => window.bountydesk.reports.openFolder(relativePath)
+    openFolder: (relativePath?: string): Promise<DbResult> => window.bountydesk.reports.openFolder(relativePath),
+    open: (programId: string, name: string): Promise<ReportOpenResult> => window.bountydesk.reports.open(programId, name),
+    reveal: (programId: string, name: string): Promise<ReportOpenResult> => window.bountydesk.reports.reveal(programId, name)
   },
   tools: {
     list: (): Promise<ToolsListResult> => window.bountydesk.tools.list(),
@@ -170,11 +172,5 @@ export const Api = {
     removeFromProgram: (programId: string, tagId: number): Promise<DbResult> =>
       window.bountydesk.tags.removeFromProgram(programId, tagId)
   },
-  reports: {
-    list: (): Promise<ReportsListResult> => window.bountydesk.reports.list(),
-    open: (programId: string, name: string): Promise<ReportOpenResult> =>
-      window.bountydesk.reports.open(programId, name),
-    reveal: (programId: string, name: string): Promise<ReportOpenResult> =>
-      window.bountydesk.reports.reveal(programId, name)
-  }
+
 }

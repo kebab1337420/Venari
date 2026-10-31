@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC, type BountyDeskBridge, type SecretCopyKind, type ToolInstallOutput } from '../shared/ipc'
+import { IPC, type BountyDeskBridge, type ExportFormat, type SecretCopyKind, type ToolInstallOutput } from '../shared/ipc'
 
 const bridge: BountyDeskBridge = {
   auth: {
@@ -37,6 +37,7 @@ const bridge: BountyDeskBridge = {
     events: (scanId: number, afterSeq: number) => ipcRenderer.invoke(IPC.ScanEvents, { scanId, afterSeq }),
     stop: (scanId: number) => ipcRenderer.invoke(IPC.ScanStop, scanId),
     remove: (scanId: number) => ipcRenderer.invoke(IPC.ScanRemove, scanId),
+    export: (format: ExportFormat) => ipcRenderer.invoke(IPC.ScansExport, format),
   },
   findings: {
     list: (query) => ipcRenderer.invoke(IPC.FindingsList, query),

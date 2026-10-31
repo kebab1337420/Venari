@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Api } from '../api'
-import type { ScanOverview } from '../../../shared/ipc'
+import type { ExportFormat, ScanOverview } from '../../../shared/ipc'
 import { ScanProgressModal } from '../components/ScanModals'
 
 const STATUS: Record<string, { label: string; cls: string }> = {
@@ -27,6 +27,23 @@ export function ScansScreen() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<ScanOverview | null>(null)
   const [tick, setTick] = useState(0)
+  const [exporting, setExporting] = useState(false)
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('csv')
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const handleExport = async (): Promise<void> => {
+    setExporting(true)
+    setError(null)
+    try {
+      const r = await Api.scans.export(exportFormat)
+      if (r.ok) setNotice(`${r.rows} scan${r.rows > 1 ? 's' : ''} exporté${r.rows > 1 ? 's' : ''} — ${r.path}`)
+      else if (!('canceled' in r && r.canceled)) setError(r.error)
+    } catch {
+      setError("L'export a échoué.")
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -96,11 +113,38 @@ export function ScansScreen() {
             Nettoyer
           </button>
         )}
+        {scans.length > 0 && (
+          <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <select
+              aria-label="Format d'export"
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+            >
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+              <option value="md">Markdown</option>
+            </select>
+            <button
+              className="btn small"
+              onClick={() => void handleExport()}
+              disabled={exporting || scans.length === 0}
+              title="Exporter les scans (fichier choisi au système)"
+            >
+              {exporting ? 'Export…' : 'Exporter'}
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
         <div className="banner-error" role="alert">
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className="banner-ok" role="status">
+          {notice}
         </div>
       )}
 

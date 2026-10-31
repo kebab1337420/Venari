@@ -33,6 +33,7 @@ export const IPC = {
   ScanEvents: 'scan:events',
   ScanStop: 'scan:stop',
   ScanRemove: 'scan:remove',
+  ScansExport: 'scans:export',
   FindingsList: 'findings:list',
   FindingsStats: 'findings:stats',
   FindingsCreate: 'findings:create',
@@ -251,6 +252,7 @@ export interface ScanOverview extends ScanRecord {
 export type ScanListAllResult = { ok: true; scans: ScanOverview[] } | DbFail
 
 export type ScanEventsResult = { ok: true; events: ScanEvent[]; done: boolean } | DbFail
+export type ScansExportResult = { ok: true; path: string; rows: number } | DbFail
 
 export const FINDING_SEVERITIES = ['info', 'low', 'medium', 'high', 'critical'] as const
 
@@ -523,6 +525,7 @@ export interface BountyDeskBridge {
     events(scanId: number, afterSeq: number): Promise<ScanEventsResult>
     stop(scanId: number): Promise<DbResult>
     remove(scanId: number): Promise<DbResult>
+    export(format: ExportFormat): Promise<ScansExportResult>
   }
   findings: {
     list(query: FindingsQuery): Promise<FindingsListResult>

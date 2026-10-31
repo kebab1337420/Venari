@@ -45,6 +45,7 @@ import type {
   ReportsListResult,
   ScanDepth,
   ScanEventsResult,
+  ScansExportResult,
   ScanListAllResult,
   ScanListResult,
   ScanStartResult,
@@ -98,7 +99,8 @@ export const Api = {
     events: (scanId: number, afterSeq: number): Promise<ScanEventsResult> =>
       window.bountydesk.scans.events(scanId, afterSeq),
     stop: (scanId: number): Promise<DbResult> => window.bountydesk.scans.stop(scanId),
-    remove: (scanId: number): Promise<DbResult> => window.bountydesk.scans.remove(scanId)
+    remove: (scanId: number): Promise<DbResult> => window.bountydesk.scans.remove(scanId),
+    export: (format: ExportFormat): Promise<ScansExportResult> => window.bountydesk.scans.export(format)
   },
   findings: {
     list: (query: FindingsQuery): Promise<FindingsListResult> => window.bountydesk.findings.list(query),

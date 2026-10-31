@@ -1,4 +1,5 @@
-import { ipcMain } from 'electron'
+import { ipcMain, dialog } from 'electron'
+import { writeFileSync } from 'node:fs'
 import { z } from 'zod'
 import { IPC, type ScanDepth } from '../shared/ipc'
 import { getRepository } from './db'
@@ -6,6 +7,7 @@ import { getClient } from './app-state'
 import { fetchProgramDetail, getCachedProgramDetail } from './services/program-detail'
 import { buildPlan, selectTargets, SCAN_DEPTHS, MAX_TARGETS } from './services/scan/plan'
 import { activeScanCount, activeScanForProgram, requestStop, startScan } from './services/scan/runner'
+import { scanExportFileName, serializeScanExport } from './services/scan-export'
 
 const programIdSchema = z.string().min(1).max(200)
 const scanIdSchema = z.number().int().positive()
@@ -154,5 +156,49 @@ export function registerScanIpc(): void {
     } catch (err) {
       return dbResultError(err)
     }
+  })
+
+  ipcMain.handle(IPC.ScansExport, async (_event, rawFormat) => {
+    const parsed = z.enum(['csv', 'json', 'md']).safeParse(rawFormat)
+    if (!parsed.success) {
+      return { ok: false, error: "Format d'export invalide." } as const
+    }
+    const format = parsed.data
+    const records = getRepository()
+      .listAllScans(1000)
+      .map((s) => ({
+        id: s.id,
+        programId: s.program_id,
+        depth: s.depth as ScanDepth,
+        status: s.status,
+        rateLimit: s.rate_limit,
+        roeConfirm: s.roe_confirm === 1,
+        startedAt: s.started_at,
+        finishedAt: s.finished_at,
+        programName: s.program_name ?? s.program_id,
+        programHandle: s.program_handle ?? '',
+      }))
+    if (records.length === 0) {
+      return { ok: false, error: 'Aucun scan à exporter.' } as const
+    }
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: 'Exporter les scans',
+      defaultPath: scanExportFileName(format),
+      filters:
+        format === 'csv'
+          ? [{ name: 'CSV (UTF-8)', extensions: ['csv'] }]
+          : format === 'json'
+            ? [{ name: 'JSON', extensions: ['json'] }]
+            : [{ name: 'Markdown', extensions: ['md'] }],
+    })
+    if (canceled || !filePath) {
+      return { ok: false, error: 'Export annulé.', canceled: true } as const
+    }
+    try {
+      writeFileSync(filePath, serializeScanExport(records, format), 'utf8')
+    } catch (err) {
+      return dbResultError(err)
+    }
+    return { ok: true, path: filePath, rows: records.length } as const
   })
 }

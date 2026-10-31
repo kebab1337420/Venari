@@ -226,12 +226,12 @@ export function App() {
           <span className="brand-name">Venari</span>
         </div>
         <nav className="nav" aria-label="Navigation principale">
-          {NAV.map((item) => (
-            <button
-              key={item.id}
-              className={`nav-item ${section === item.id ? 'active' : ''}`}
-              aria-current={section === item.id ? 'page' : undefined}
-              title={`${item.label} (Ctrl+${NAV.indexOf(item) + 1})`}
+          {NAV.map((item, i) => (
+              <button
+                key={item.id}
+                className={`nav-item ${section === item.id ? 'active' : ''}`}
+                aria-current={section === item.id ? 'page' : undefined}
+                title={`${item.label} (Ctrl+${i + 1})`}
               onClick={() => goto(item.id)}
             >
               <span className="nav-icon">{item.icon}</span>

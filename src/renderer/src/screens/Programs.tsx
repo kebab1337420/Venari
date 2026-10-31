@@ -202,6 +202,18 @@ export function ProgramsScreen() {
   const [editingGroupName, setEditingGroupName] = useState('')
 
   const searchRef = useRef<HTMLInputElement>(null)
+  // Raccourci '/' pour focaliser la recherche (comme dans beaucoup d'outils CLI).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      if (e.key !== '/') return
+      e.preventDefault()
+      searchRef.current?.focus()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
   // Numéro de séquence de la dernière requête de liste : une réponse lente qui
   // arrive après une réponse plus récente est jetée au lieu d'écraser l'écran.
   const listSeq = useRef(0)

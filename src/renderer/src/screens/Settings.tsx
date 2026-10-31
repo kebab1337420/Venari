@@ -140,8 +140,8 @@ export function SettingsScreen({ onLogout }: Props) {
       .status()
       .then((s) => setKeyring(s.keyring))
       .catch(() => setKeyring(null))
-    void Api.app.version().then((r) => {
-      if (r.ok) setAppVersion(`${r.name} ${r.version}`)
+    void Api.app?.version?.().then((r) => {
+      if (r?.ok) setAppVersion(`${r.name} ${r.version}`)
     })
     // Les sessions distantes arrivent d'un appareil externe : sans cet
     // auto-refresh, une demande « en attente » n'apparaît que si l'utilisateur

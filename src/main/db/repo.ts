@@ -753,6 +753,17 @@ export class Repository {
       .all(scanId, afterSeq, limit) as unknown as ScanEventRow[]
   }
 
+  /**
+   * Journal complet, sans la borne de 500 lignes utilisee par le suivi live :
+   * l'export doit contenir tout ce qui a ete journalise, pas la fenetre
+   * actuellement affichee.
+   */
+  listAllScanEvents(scanId: number): ScanEventRow[] {
+    return this.db
+      .prepare('SELECT * FROM scan_events WHERE scan_id = ? ORDER BY seq ASC')
+      .all(scanId) as unknown as ScanEventRow[]
+  }
+
   appendMcpRequest(input: { ts: number; tokenLabel: string; tool: string; argsJson: string; status: string; ms: number; remoteIp: string }): void {
     this.db
       .prepare('INSERT INTO mcp_requests (ts, token_label, tool, args_json, status, ms, remote_ip) VALUES (?, ?, ?, ?, ?, ?, ?)')

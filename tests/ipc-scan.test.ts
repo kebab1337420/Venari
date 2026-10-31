@@ -1,4 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { IPC, type ProgramDetailData, type ScopeDomain } from '../src/shared/ipc'
 
 type Handler = (event: unknown, raw: unknown) => unknown
@@ -10,10 +13,13 @@ const hoisted = vi.hoisted(() => ({
     listScans: vi.fn<(programId: string) => unknown[]>(),
     listAllScans: vi.fn<(limit: number) => unknown[]>(),
     getScan: vi.fn<(id: number) => unknown>(),
+    getProgram: vi.fn<(id: string) => unknown>(),
     removeScan: vi.fn<(id: number) => void>(),
     listScanEvents: vi.fn<(id: number, after: number) => unknown[]>(),
+    listAllScanEvents: vi.fn<(id: number) => unknown[]>(),
   },
   client: { getToken: vi.fn<() => string>() },
+  showSaveDialog: vi.fn<() => Promise<unknown>>(),
   fetchProgramDetail: vi.fn<(client: unknown, programId: string) => Promise<unknown>>(),
   getCachedProgramDetail: vi.fn<(programId: string) => unknown>(),
   activeScanCount: vi.fn<() => number>(),
@@ -28,6 +34,7 @@ vi.mock('electron', () => ({
       hoisted.handlers.set(channel, fn)
     },
   },
+  dialog: { showSaveDialog: hoisted.showSaveDialog },
 }))
 vi.mock('../src/main/db', () => ({ getRepository: () => hoisted.repo }))
 vi.mock('../src/main/app-state', () => ({ getClient: () => hoisted.client }))
@@ -91,7 +98,10 @@ beforeEach(() => {
   hoisted.repo.listScans.mockReturnValue([])
   hoisted.repo.listAllScans.mockReturnValue([])
   hoisted.repo.getScan.mockReturnValue(undefined)
+  hoisted.repo.getProgram.mockReturnValue(undefined)
   hoisted.repo.listScanEvents.mockReturnValue([])
+  hoisted.repo.listAllScanEvents.mockReturnValue([])
+  hoisted.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined })
   hoisted.client.getToken.mockReturnValue('tok')
   hoisted.fetchProgramDetail.mockResolvedValue(detail())
   hoisted.getCachedProgramDetail.mockReturnValue(null)
@@ -301,6 +311,66 @@ describe('ScanStop', () => {
     const res = call(IPC.ScanStop, 7)
     expect(res).toEqual({ ok: true, stopped: true })
     expect(hoisted.requestStop).toHaveBeenCalledWith(7)
+  })
+})
+
+describe('ScanExportLog', () => {
+  const scanRow = {
+    id: 7,
+    program_id: 'p1',
+    depth: 'low',
+    status: 'done',
+    rate_limit: 2,
+    roe_confirm: 1,
+    started_at: 1_000,
+    finished_at: 5_000,
+  }
+
+  it('ecrit le journal complet dans le fichier choisi', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'venari-scan-log-'))
+    const target = join(dir, 'journal.txt')
+    try {
+      hoisted.repo.getScan.mockReturnValue(scanRow)
+      hoisted.repo.getProgram.mockReturnValue({ name: 'Acme', handle: 'acme' })
+      hoisted.repo.listAllScanEvents.mockReturnValue([
+        { seq: 1, ts: 2_000, level: 'info', message: 'debut' },
+        { seq: 2, ts: 3_000, level: 'error', message: 'boum' },
+      ])
+      hoisted.showSaveDialog.mockResolvedValue({ canceled: false, filePath: target })
+
+      const res = await call(IPC.ScanExportLog, 7)
+      expect(res).toEqual({ ok: true, path: target, events: 2 })
+      expect(hoisted.repo.listAllScanEvents).toHaveBeenCalledWith(7)
+      expect(hoisted.showSaveDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultPath: 'scan-7-acme.txt' }),
+      )
+      const text = readFileSync(target, 'utf8')
+      expect(text).toContain('Programme : Acme (@acme)')
+      expect(text).toContain('[1970-01-01T00:00:02.000Z] [info] debut')
+      expect(text).toContain('[1970-01-01T00:00:03.000Z] [error] boum')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rapporte l annulation sans ecrire de fichier', async () => {
+    hoisted.repo.getScan.mockReturnValue(scanRow)
+    hoisted.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined })
+    const res = await call(IPC.ScanExportLog, 7)
+    expect(res).toEqual({ ok: false, error: 'Export annulé.', canceled: true })
+  })
+
+  it('refuse un scan inconnu avant d ouvrir le selecteur', async () => {
+    hoisted.repo.getScan.mockReturnValue(undefined)
+    const res = await call(IPC.ScanExportLog, 99)
+    expect(res).toMatchObject({ ok: false })
+    expect(hoisted.showSaveDialog).not.toHaveBeenCalled()
+  })
+
+  it('rejette un identifiant invalide', async () => {
+    const res = await call(IPC.ScanExportLog, 0)
+    expect(res).toMatchObject({ ok: false })
+    expect(hoisted.repo.getScan).not.toHaveBeenCalled()
   })
 })
 

@@ -31,6 +31,7 @@ export const IPC = {
   ScanList: 'scan:list',
   ScanListAll: 'scan:listAll',
   ScanEvents: 'scan:events',
+  ScanExportLog: 'scan:exportLog',
   ScanStop: 'scan:stop',
   ScanRemove: 'scan:remove',
   ScansExport: 'scans:export',
@@ -269,6 +270,14 @@ export type ScanListAllResult = { ok: true; scans: ScanOverview[] } | DbFail
 
 export type ScanEventsResult = { ok: true; events: ScanEvent[]; done: boolean } | DbFail
 export type ScansExportResult = { ok: true; path: string; rows: number } | DbFail
+
+/**
+ * Ecriture du journal complet (pas seulement les lignes encore en memoire dans
+ * la modale). Un export annule au selecteur n'est pas une erreur a afficher.
+ */
+export type ScanLogExportResult =
+  | { ok: true; path: string; events: number }
+  | { ok: false; error: string; canceled?: boolean }
 
 export const FINDING_SEVERITIES = ['info', 'low', 'medium', 'high', 'critical'] as const
 
@@ -539,6 +548,7 @@ export interface BountyDeskBridge {
     list(programId: string): Promise<ScanListResult>
     listAll(limit?: number): Promise<ScanListAllResult>
     events(scanId: number, afterSeq: number): Promise<ScanEventsResult>
+    exportLog(scanId: number): Promise<ScanLogExportResult>
     stop(scanId: number): Promise<DbResult>
     remove(scanId: number): Promise<DbResult>
     export(format: ExportFormat): Promise<ScansExportResult>

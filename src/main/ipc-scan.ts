@@ -1,4 +1,4 @@
-import { ipcMain, dialog } from 'electron'
+import { dialog, ipcMain } from 'electron'
 import { writeFileSync } from 'node:fs'
 import { z } from 'zod'
 import { IPC, type ScanDepth } from '../shared/ipc'
@@ -6,6 +6,7 @@ import { getRepository } from './db'
 import { getClient } from './app-state'
 import { fetchProgramDetail, getCachedProgramDetail } from './services/program-detail'
 import { buildPlan, selectTargets, SCAN_DEPTHS, MAX_TARGETS } from './services/scan/plan'
+import { formatScanLog, scanLogFileName } from './services/scan/scan-log'
 import { activeScanCount, activeScanForProgram, requestStop, startScan } from './services/scan/runner'
 import { scanExportFileName, serializeScanExport } from './services/scan-export'
 
@@ -133,6 +134,42 @@ export function registerScanIpc(): void {
         .listScanEvents(scanId, afterSeq)
         .map((r) => ({ seq: r.seq, ts: r.ts, level: r.level, message: r.message }))
       return { ok: true, events, done: scan.status !== 'running' } as const
+    } catch (err) {
+      return dbResultError(err)
+    }
+  })
+
+  ipcMain.handle(IPC.ScanExportLog, async (_event, rawId) => {
+    try {
+      const scanId = scanIdSchema.parse(rawId)
+      const repo = getRepository()
+      const scan = repo.getScan(scanId)
+      if (!scan) return { ok: false, error: `Scan introuvable (id=${scanId})` } as const
+
+      const program = repo.getProgram(scan.program_id)
+      const meta = {
+        id: scan.id,
+        programName: program?.name ?? scan.program_id,
+        programHandle: program?.handle ?? '',
+        depth: scan.depth,
+        status: scan.status,
+        rateLimit: scan.rate_limit,
+        startedAt: scan.started_at,
+        finishedAt: scan.finished_at,
+      }
+      const events = repo
+        .listAllScanEvents(scanId)
+        .map((r) => ({ seq: r.seq, ts: r.ts, level: r.level, message: r.message }))
+
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Exporter le journal du scan',
+        defaultPath: scanLogFileName(meta),
+        filters: [{ name: 'Journal (texte)', extensions: ['txt', 'log'] }],
+      })
+      if (canceled || !filePath) return { ok: false, error: 'Export annulé.', canceled: true } as const
+
+      writeFileSync(filePath, formatScanLog(meta, events), 'utf8')
+      return { ok: true, path: filePath, events: events.length } as const
     } catch (err) {
       return dbResultError(err)
     }

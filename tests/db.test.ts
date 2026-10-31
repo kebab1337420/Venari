@@ -285,6 +285,8 @@ describe('Repository', () => {
     expect(repo.countScanEvents(scanId)).toBe(3)
     expect(repo.listScanEvents(scanId, 0).map((r) => r.message)).toEqual(['ligne 1', 'ligne 2', 'ligne 3'])
     expect(repo.listScanEvents(scanId, 1).map((r) => r.seq)).toEqual([2, 3])
+    // L'export relit tout le journal, sans la borne de la fenetre live.
+    expect(repo.listAllScanEvents(scanId).map((r) => r.message)).toEqual(['ligne 1', 'ligne 2', 'ligne 3'])
   })
 
   it('ignore un lot vide sans toucher au journal', () => {

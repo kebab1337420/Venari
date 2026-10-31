@@ -478,6 +478,7 @@ async function downloadToFile(url: string, dest: string): Promise<void> {
     }
     if (stall) ctrl.abort()
   }, 2000)
+  watchdog.unref()
   let file: ReturnType<typeof createWriteStream> | null = null
   try {
     const res = await fetch(url, { headers: githubHeaders(), signal: ctrl.signal })

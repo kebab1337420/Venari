@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Api } from '../api'
 import type { ExportFormat, ScanOverview } from '../../../shared/ipc'
 import { ScanProgressModal } from '../components/ScanModals'
@@ -82,11 +82,11 @@ export function ScansScreen() {
   }
 
   const needle = search.trim().toLowerCase()
-  const filtered = scans.filter((s) => {
+  const filtered = useMemo(() => scans.filter((s) => {
     if (statusFilter !== 'all' && s.status !== statusFilter) return false
     if (needle === '') return true
     return `${s.programName} ${s.programHandle}`.toLowerCase().includes(needle)
-  })
+  }), [scans, statusFilter, needle])
   const filtering = statusFilter !== 'all' || needle !== ''
   const resetFilters = (): void => {
     setStatusFilter('all')

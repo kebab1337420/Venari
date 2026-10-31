@@ -27,6 +27,8 @@ export function ScansScreen() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<ScanOverview | null>(null)
   const [tick, setTick] = useState(0)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'running' | 'done' | 'error' | 'stopped'>('all')
+  const [search, setSearch] = useState('')
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -62,6 +64,18 @@ export function ScansScreen() {
     setTick((n) => n + 1)
   }
 
+  const needle = search.trim().toLowerCase()
+  const filtered = scans.filter((s) => {
+    if (statusFilter !== 'all' && s.status !== statusFilter) return false
+    if (needle === '') return true
+    return `${s.programName} ${s.programHandle}`.toLowerCase().includes(needle)
+  })
+  const filtering = statusFilter !== 'all' || needle !== ''
+  const resetFilters = (): void => {
+    setStatusFilter('all')
+    setSearch('')
+  }
+
   return (
     <div className="section">
       <div className="section-header">
@@ -72,12 +86,33 @@ export function ScansScreen() {
       </div>
 
       <div className="box scans-toolbar">
+        <input
+          className="search"
+          type="search"
+          placeholder="Rechercher un programme…"
+          aria-label="Rechercher un programme"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          aria-label="Filtrer par statut"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+        >
+          <option value="all">Tous les statuts</option>
+          <option value="running">En cours</option>
+          <option value="done">Terminé</option>
+          <option value="error">Erreur</option>
+          <option value="stopped">Arrêté</option>
+        </select>
         <span className="muted" aria-live="polite">
           {loading
             ? 'Chargement…'
-            : running > 0
-              ? `${running} scan${running > 1 ? 's' : ''} en cours`
-              : `${scans.length} scan${scans.length > 1 ? 's' : ''}`}
+            : filtering
+              ? `${filtered.length} sur ${scans.length} scan${scans.length > 1 ? 's' : ''}`
+              : running > 0
+                ? `${running} scan${running > 1 ? 's' : ''} en cours`
+                : `${scans.length} scan${scans.length > 1 ? 's' : ''}`}
         </span>
         <button className="btn small" onClick={() => setTick((n) => n + 1)} disabled={loading}>
           Rafraîchir
@@ -96,7 +131,16 @@ export function ScansScreen() {
         </div>
       )}
 
-      {scans.length > 0 && (
+      {!loading && scans.length > 0 && filtered.length === 0 && (
+        <div className="empty-state">
+          <p>Aucun scan ne correspond à ces filtres.</p>
+          <button className="btn small" onClick={resetFilters}>
+            Réinitialiser
+          </button>
+        </div>
+      )}
+
+      {filtered.length > 0 && (
         <table className="mcp-table scans-table">
           <thead>
             <tr>
@@ -109,7 +153,7 @@ export function ScansScreen() {
             </tr>
           </thead>
           <tbody>
-            {scans.map((s) => {
+            {filtered.map((s) => {
               const st = STATUS[s.status] ?? { label: s.status, cls: 'stopped' }
               return (
                 <tr key={s.id}>

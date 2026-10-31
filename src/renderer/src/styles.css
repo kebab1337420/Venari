@@ -1237,7 +1237,7 @@ select {
 .scan-status.stopped { color: var(--amber); border-color: currentColor; background: var(--amber-soft); }
 .scans-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .scans-table td { vertical-align: middle; }
-.scans-toolbar .search { max-width: 360px; }
+.scans-toolbar .search { flex: 1; max-width: 360px; }
 .report-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .scan-follow { align-self: flex-end; margin-top: -4px; }
 .scan-h-item { display: flex; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); color: var(--text); cursor: pointer; font-size: 12px; }

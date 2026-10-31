@@ -173,6 +173,8 @@ export function ScanProgressModal({ program, scanId, onClose }: ProgressProps) {
   const [following, setFollowing] = useState(true)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [notice, setNotice] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null)
   const lastSeq = useRef(0)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const box = useRef<HTMLDivElement | null>(null)
@@ -241,6 +243,33 @@ export function ScanProgressModal({ program, scanId, onClose }: ProgressProps) {
     }
   }
 
+  /**
+   * L'export relit le journal complet en base : il n'est pas borne par la
+   * fenetre de 2 000 lignes gardee en memoire pour l'affichage.
+   */
+  const exportLog = async (): Promise<void> => {
+    setExporting(true)
+    setNotice(null)
+    try {
+      const r = await Api.scans.exportLog(scanId)
+      if (r.ok) {
+        setNotice({
+          text: `Journal exporté (${r.events} événement${r.events > 1 ? 's' : ''}) : ${r.path}`,
+          kind: 'ok'
+        })
+      } else if (!r.canceled) {
+        setNotice({ text: r.error, kind: 'error' })
+      }
+    } catch (e) {
+      setNotice({
+        text: `Export du journal impossible : ${e instanceof Error ? e.message : String(e)}`,
+        kind: 'error'
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const onScroll = (): void => {
     const el = box.current
     if (!el) return
@@ -258,6 +287,7 @@ export function ScanProgressModal({ program, scanId, onClose }: ProgressProps) {
   return (
     <Modal title={done ? `Scan terminé — ${program.name}` : `Scan en cours — ${program.name}`} onClose={onClose} wide>
       {error && <div className="banner-error">{error}</div>}
+      {notice && <div className={notice.kind === 'ok' ? 'banner-ok' : 'banner-error'}>{notice.text}</div>}
       <div className="scan-log" ref={box} onScroll={onScroll}>
         {truncated && (
           <p className="muted" style={{ margin: '0 0 4px' }}>
@@ -279,6 +309,9 @@ export function ScanProgressModal({ program, scanId, onClose }: ProgressProps) {
         </button>
       )}
       <div className="modal-footer" style={{ padding: '12px 0 0' }}>
+        <button className="btn" onClick={() => void exportLog()} disabled={exporting}>
+          {exporting ? 'Export…' : 'Exporter le journal'}
+        </button>
         {!done && (
           <button className="btn danger" onClick={() => void stop()}>
             ■ Arrêter

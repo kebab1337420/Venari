@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ScanOverview } from '../src/shared/ipc'
 
 const api = vi.hoisted(() => ({
-  scans: { listAll: vi.fn(), events: vi.fn(), stop: vi.fn() },
+  scans: { listAll: vi.fn(), events: vi.fn(), exportLog: vi.fn(), stop: vi.fn() },
 }))
 
 vi.mock('../src/renderer/src/api', () => ({ Api: api }))
@@ -31,6 +31,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   api.scans.listAll.mockResolvedValue({ ok: true, scans: [scan()] })
   api.scans.events.mockResolvedValue({ ok: true, events: [], done: true })
+  api.scans.exportLog.mockResolvedValue({ ok: false, error: 'Export annulé.', canceled: true })
   api.scans.stop.mockResolvedValue({ ok: true })
 })
 
@@ -108,5 +109,73 @@ describe('ScansScreen', () => {
     render(<ScansScreen />)
 
     expect(await screen.findByText('1 scan en cours')).toBeTruthy()
+  })
+
+  it('filtre par statut, recherche par programme et reinitialise', async () => {
+    api.scans.listAll.mockResolvedValue({
+      ok: true,
+      scans: [
+        scan({ id: 1, programName: 'Alpha', programHandle: 'alpha' }),
+        scan({ id: 2, programName: 'Beta', programHandle: 'beta', status: 'error', finishedAt: 2_000 }),
+      ],
+    })
+    render(<ScansScreen />)
+    await screen.findByText('Alpha')
+    expect(screen.getByText('Beta')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Filtrer par statut'), { target: { value: 'error' } })
+    expect(screen.queryByText('Alpha')).toBeNull()
+    expect(screen.getByText('Beta')).toBeTruthy()
+    expect(screen.getByText('1 sur 2 scans')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Rechercher un programme'), { target: { value: 'alpha' } })
+    expect(await screen.findByText('Aucun scan ne correspond à ces filtres.')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Réinitialiser'))
+    expect(screen.getByText('Alpha')).toBeTruthy()
+    expect(screen.getByText('Beta')).toBeTruthy()
+    expect(screen.getByText('2 scans')).toBeTruthy()
+  })
+
+  it('recherche par handle insensible a la casse', async () => {
+    api.scans.listAll.mockResolvedValue({
+      ok: true,
+      scans: [
+        scan({ id: 1, programName: 'Alpha', programHandle: 'alpha' }),
+        scan({ id: 2, programName: 'Beta', programHandle: 'beta' }),
+      ],
+    })
+    render(<ScansScreen />)
+    await screen.findByText('Alpha')
+
+    fireEvent.change(screen.getByLabelText('Rechercher un programme'), { target: { value: 'BETA' } })
+    expect(screen.queryByText('Alpha')).toBeNull()
+    expect(screen.getByText('Beta')).toBeTruthy()
+  })
+
+  it('exporte le journal complet depuis la modale', async () => {
+    api.scans.exportLog.mockResolvedValue({ ok: true, path: 'C:/tmp/scan-7-acme.txt', events: 2 })
+    render(<ScansScreen />)
+
+    fireEvent.click(await screen.findByText('Journal'))
+    await screen.findByText('Scan terminé — Acme Corp')
+    fireEvent.click(screen.getByText('Exporter le journal'))
+
+    expect(await screen.findByText(/Journal exporté \(2 événements\)/)).toBeTruthy()
+    expect(api.scans.exportLog).toHaveBeenCalledWith(7)
+  })
+
+  it('reste muet quand l export est annule et signale une vraie erreur', async () => {
+    render(<ScansScreen />)
+    fireEvent.click(await screen.findByText('Journal'))
+    await screen.findByText('Scan terminé — Acme Corp')
+
+    fireEvent.click(screen.getByText('Exporter le journal'))
+    await waitFor(() => expect(api.scans.exportLog).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText('Export annulé.')).toBeNull()
+
+    api.scans.exportLog.mockResolvedValue({ ok: false, error: 'disque plein' })
+    fireEvent.click(screen.getByText('Exporter le journal'))
+    expect(await screen.findByText('disque plein')).toBeTruthy()
   })
 })

@@ -164,10 +164,17 @@ function parseRetryAfterMs(header: string | null): number | null {
     return null
   }
   const seconds = Number.parseInt(header, 10)
-  if (!Number.isFinite(seconds) || seconds < 0) {
-    return null
+  if (Number.isFinite(seconds) && seconds >= 0 && String(seconds) === header.trim()) {
+    return Math.min(MAX_RETRY_AFTER_MS, seconds * 1000)
   }
-  return Math.min(MAX_RETRY_AFTER_MS, seconds * 1000)
+  // Forme date HTTP (RFC 7231) : "Retry-After: <http-date>".
+  const dateMs = Date.parse(header)
+  if (Number.isFinite(dateMs)) {
+    const delta = dateMs - Date.now()
+    if (delta <= 0) return 1000
+    return Math.min(MAX_RETRY_AFTER_MS, Math.max(1000, delta))
+  }
+  return null
 }
 
 function isAbortError(error: unknown): boolean {

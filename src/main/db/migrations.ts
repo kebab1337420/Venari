@@ -217,4 +217,13 @@ export const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 10,
+    up(db) {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
+        CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id);
+      `)
+    },
+  },
 ]

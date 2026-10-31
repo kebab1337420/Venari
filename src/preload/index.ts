@@ -5,7 +5,10 @@ const bridge: BountyDeskBridge = {
   auth: {
     getStatus: () => ipcRenderer.invoke(IPC.AuthStatus),
     validate: (token: string) => ipcRenderer.invoke(IPC.AuthValidate, token),
-    clear: () => ipcRenderer.invoke(IPC.AuthClear),
+    clear: () => ipcRenderer.invoke(IPC.AuthClear)
+  },
+  app: {
+    version: () => ipcRenderer.invoke(IPC.AppVersion)
   },
   programs: {
     list: (query) => ipcRenderer.invoke(IPC.ProgramsList, query),
@@ -33,6 +36,7 @@ const bridge: BountyDeskBridge = {
     listAll: (limit?: number) => ipcRenderer.invoke(IPC.ScanListAll, limit),
     events: (scanId: number, afterSeq: number) => ipcRenderer.invoke(IPC.ScanEvents, { scanId, afterSeq }),
     stop: (scanId: number) => ipcRenderer.invoke(IPC.ScanStop, scanId),
+    remove: (scanId: number) => ipcRenderer.invoke(IPC.ScanRemove, scanId),
   },
   findings: {
     list: (query) => ipcRenderer.invoke(IPC.FindingsList, query),

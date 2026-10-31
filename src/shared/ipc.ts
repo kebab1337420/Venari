@@ -2,6 +2,7 @@ export const IPC = {
   AuthStatus: 'auth:status',
   AuthValidate: 'auth:validate',
   AuthClear: 'auth:clear',
+  AppVersion: 'app:version',
   ProgramsList: 'programs:list',
   ProgramsSync: 'programs:sync',
   ProgramsExport: 'programs:export',
@@ -31,6 +32,7 @@ export const IPC = {
   ScanListAll: 'scan:listAll',
   ScanEvents: 'scan:events',
   ScanStop: 'scan:stop',
+  ScanRemove: 'scan:remove',
   FindingsList: 'findings:list',
   FindingsStats: 'findings:stats',
   FindingsCreate: 'findings:create',
@@ -484,6 +486,7 @@ export type AgentViewTokenResult = { ok: true; token: string } | DbFail
 export type SecretCopyKind = 'mcpToken' | 'agentToken' | 'mcpConfig' | 'agentConfig'
 
 export type SecretCopyResult = { ok: true } | DbFail
+export type AppVersionResult = { ok: true; version: string; name: string } | DbFail
 
 export type CredentialRevealResult = { ok: true; secret: string } | DbFail
 
@@ -505,6 +508,9 @@ export interface BountyDeskBridge {
     getStatus(): Promise<AuthStatus>
     validate(token: string): Promise<AuthValidateResult>
     clear(): Promise<void>
+  }
+  app: {
+    version(): Promise<AppVersionResult>
   }
   programs: {
     list(query: ProgramsQuery): Promise<ProgramsPage>
@@ -532,6 +538,7 @@ export interface BountyDeskBridge {
     listAll(limit?: number): Promise<ScanListAllResult>
     events(scanId: number, afterSeq: number): Promise<ScanEventsResult>
     stop(scanId: number): Promise<DbResult>
+    remove(scanId: number): Promise<DbResult>
   }
   findings: {
     list(query: FindingsQuery): Promise<FindingsListResult>

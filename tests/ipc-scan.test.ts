@@ -10,6 +10,7 @@ const hoisted = vi.hoisted(() => ({
     listScans: vi.fn<(programId: string) => unknown[]>(),
     listAllScans: vi.fn<(limit: number) => unknown[]>(),
     getScan: vi.fn<(id: number) => unknown>(),
+    removeScan: vi.fn<(id: number) => void>(),
     listScanEvents: vi.fn<(id: number, after: number) => unknown[]>(),
   },
   client: { getToken: vi.fn<() => string>() },
@@ -300,5 +301,18 @@ describe('ScanStop', () => {
     const res = call(IPC.ScanStop, 7)
     expect(res).toEqual({ ok: true, stopped: true })
     expect(hoisted.requestStop).toHaveBeenCalledWith(7)
+  })
+})
+
+describe('ScanRemove', () => {
+  it('supprime le scan', () => {
+    const res = call(IPC.ScanRemove, 7)
+    expect(res).toEqual({ ok: true })
+    expect(hoisted.repo.removeScan).toHaveBeenCalledWith(7)
+  })
+
+  it('rejette un id invalide', () => {
+    const res = call(IPC.ScanRemove, 0)
+    expect(res).toMatchObject({ ok: false })
   })
 })

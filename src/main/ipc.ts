@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, app } from 'electron'
 import { z } from 'zod'
 import { IPC } from '../shared/ipc'
 import type { AuthRemoteHandlers } from './ipc-types'
@@ -22,5 +22,9 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.AuthClear, async (): Promise<void> => {
     clearTokenFromStore()
+  })
+
+  ipcMain.handle(IPC.AppVersion, async (): Promise<{ ok: true; version: string; name: string }> => {
+    return { ok: true, version: app.getVersion(), name: app.getName() }
   })
 }

@@ -7,6 +7,7 @@ import type {
   AgentTokenRevokeResult,
   AgentTokensResult,
   AgentViewTokenResult,
+  AppVersionResult,
   AuthStatus,
   AuthValidateResult,
   CredentialInput,
@@ -63,6 +64,9 @@ export const Api = {
     status: (): Promise<AuthStatus> => window.bountydesk.auth.getStatus(),
     validate: (token: string): Promise<AuthValidateResult> => window.bountydesk.auth.validate(token),
     logout: (): Promise<void> => window.bountydesk.auth.clear()
+  },
+  app: {
+    version: (): Promise<AppVersionResult> => window.bountydesk.app.version()
   },
   programs: {
     list: (query: ProgramsQuery): Promise<ProgramsPage> => window.bountydesk.programs.list(query),

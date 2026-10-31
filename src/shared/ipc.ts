@@ -2,6 +2,7 @@ export const IPC = {
   AuthStatus: 'auth:status',
   AuthValidate: 'auth:validate',
   AuthClear: 'auth:clear',
+  AppVersion: 'app:version',
   ProgramsList: 'programs:list',
   ProgramsSync: 'programs:sync',
   ProgramsExport: 'programs:export',
@@ -469,6 +470,7 @@ export type AgentViewTokenResult = { ok: true; token: string } | DbFail
 export type SecretCopyKind = 'mcpToken' | 'agentToken' | 'mcpConfig' | 'agentConfig'
 
 export type SecretCopyResult = { ok: true } | DbFail
+export type AppVersionResult = { ok: true; version: string; name: string } | DbFail
 
 export type CredentialRevealResult = { ok: true; secret: string } | DbFail
 
@@ -490,6 +492,9 @@ export interface BountyDeskBridge {
     getStatus(): Promise<AuthStatus>
     validate(token: string): Promise<AuthValidateResult>
     clear(): Promise<void>
+  }
+  app: {
+    version(): Promise<AppVersionResult>
   }
   programs: {
     list(query: ProgramsQuery): Promise<ProgramsPage>

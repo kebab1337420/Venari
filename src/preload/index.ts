@@ -5,7 +5,10 @@ const bridge: BountyDeskBridge = {
   auth: {
     getStatus: () => ipcRenderer.invoke(IPC.AuthStatus),
     validate: (token: string) => ipcRenderer.invoke(IPC.AuthValidate, token),
-    clear: () => ipcRenderer.invoke(IPC.AuthClear),
+    clear: () => ipcRenderer.invoke(IPC.AuthClear)
+  },
+  app: {
+    version: () => ipcRenderer.invoke(IPC.AppVersion)
   },
   programs: {
     list: (query) => ipcRenderer.invoke(IPC.ProgramsList, query),

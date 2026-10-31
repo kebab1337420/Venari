@@ -307,7 +307,10 @@ export class ScanRunner {
         outTail = ''
         errTail = ''
       }
+      let settled = false
       const settle = (outcome: StepOutcome) => {
+        if (settled) return
+        settled = true
         clearTimeout(timer)
         flushTails()
         if (this.current === child) this.current = null

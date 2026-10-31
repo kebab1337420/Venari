@@ -9,15 +9,19 @@ export function killTree(child: ChildProcess): void {
   const pid = child.pid
   if (pid === undefined) return
   if (process.platform === 'win32') {
-    // taskkill /TJoine l'arbre de processus ; on garde le repli direct.
-    spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', shell: false })
-      .on('error', () => {
-        try {
-          child.kill('SIGKILL')
-        } catch {
-          /* deja mort */
-        }
-      })
+    // taskkill /T tue l'arbre de processus ; on garde le repli direct.
+    const fallback = (): void => {
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        /* deja mort */
+      }
+    }
+    const tk = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', shell: false })
+    tk.on('error', fallback)
+    tk.on('exit', (code) => {
+      if (code !== 0 && code !== null) fallback()
+    })
     return
   }
   // detached: true fait de l'enfant le meneur de son groupe : le pid negatif

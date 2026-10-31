@@ -149,6 +149,33 @@ export function App() {
     setVisited((v) => (v.includes(id) ? v : [...v, id]))
   }
 
+  useEffect(() => {
+    if (view !== 'app') return
+    const handler = (e: KeyboardEvent): void => {
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
+      const idx = Number(e.key) - 1
+      if (!Number.isInteger(idx) || idx < 0 || idx >= NAV.length) return
+      e.preventDefault()
+      const navItem = NAV[idx]
+      if (!navItem) return
+      const id = navItem.id
+      setSection(id)
+      setVisited((v) => (v.includes(id) ? v : [...v, id]))
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [view])
+
   if (view === 'loading') {
     return (
       <div className="splash">
@@ -204,7 +231,7 @@ export function App() {
               key={item.id}
               className={`nav-item ${section === item.id ? 'active' : ''}`}
               aria-current={section === item.id ? 'page' : undefined}
-              title={item.label}
+              title={`${item.label} (Ctrl+${NAV.indexOf(item) + 1})`}
               onClick={() => goto(item.id)}
             >
               <span className="nav-icon">{item.icon}</span>

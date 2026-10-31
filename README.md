@@ -121,6 +121,7 @@ Le port MCP n'est volontairement pas vérifié par les jobs de smoke test : le s
 ### Détail de mission et credentials
 - Clic sur un programme → modal **Détails** : badges (statut/type/confidentialité/secteur), primes min/max, **règles d'engagement (ROE)** complètes (Intigriti Me, outils automatisés, user-agent, header autorisé, safe harbour, pièces jointes) et **scope in/out** (domaines, tiers, skills requis), lien vers la page programme.
 - Bouton **Get credentials** : identifiants (login/mot de passe) chiffrés par programme, avec raccourci vers la page de login de la mission. Les secrets ne sont jamais envoyés au renderer en clair sauf demande explicite de révélation.
+- **Détection des changements de scope** : à chaque ouverture de la fiche, le scope courant est comparé à l'empreinte enregistrée lors de la consultation précédente. Les cibles **ajoutées** (vertes) et **retirées** (rouges) sont listées en tête du détail ; le premier passage sert seulement de référence. Une cible qui passe in-scope → out-of-scope compte comme un retrait et un ajout. Empreinte dédupliquée et triée : un simple réordonnancement de l'API ne déclenche rien.
 
 ### Scans low / med / high
 - Bouton **Scanner** dans le détail d'une mission : profils de profondeur — Bas (curl + nuclei low/medium), Moyen (+ tags tech/exposure, severities ≤ high), Élevé (+ ffuf, severities ≤ critical).

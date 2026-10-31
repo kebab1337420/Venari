@@ -242,7 +242,7 @@ describe('Repository', () => {
     expect(busy.timeout).toBe(5000)
 
     const version = db.prepare('SELECT user_version FROM pragma_user_version').get() as unknown as { user_version: number }
-    expect(version.user_version).toBe(8)
+    expect(version.user_version).toBe(9)
 
     const indexes = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as unknown as Array<{ name: string }>).map((i) => i.name)
     expect(indexes).toContain('idx_programs_name_nocase')
@@ -312,5 +312,27 @@ describe('Repository', () => {
     expect(msgs[0]).toContain('interrompu')
     // Un second passage (redémarrage suivant) ne trouve plus rien à refermer.
     expect(repo.failOrphanScans()).toBe(0)
+  })
+
+  it('memorise l empreinte de scope et la remplace au passage suivant', () => {
+    repo.upsertProgram(sample())
+    expect(repo.getScopeState('prog-1')).toBeNull()
+
+    repo.saveScopeState('prog-1', ['in|https://a.example'], 123)
+    expect(repo.getScopeState('prog-1')).toEqual({ entries: ['in|https://a.example'], checkedAt: 123 })
+
+    repo.saveScopeState('prog-1', ['out|https://a.example'], 456)
+    expect(repo.getScopeState('prog-1')).toEqual({ entries: ['out|https://a.example'], checkedAt: 456 })
+  })
+
+  it('ignore une empreinte de scope illisible au lieu de faire echouer le detail', () => {
+    repo.upsertProgram(sample())
+    db.prepare(
+      'INSERT INTO program_scope_state (program_id, entries_json, checked_at) VALUES (?, ?, ?)',
+    ).run('prog-1', '{"pas": "un tableau"}', 1)
+    expect(repo.getScopeState('prog-1')).toBeNull()
+
+    db.prepare("UPDATE program_scope_state SET entries_json = '[1, 2]' WHERE program_id = 'prog-1'").run()
+    expect(repo.getScopeState('prog-1')).toBeNull()
   })
 })

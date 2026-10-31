@@ -44,6 +44,7 @@ const ALL_TABLES = [
   'mcp_requests',
   'remote_sessions',
   'findings',
+  'program_scope_state',
 ]
 
 describe('migrations', () => {
@@ -138,6 +139,20 @@ describe('migrations', () => {
         'updated_at',
       ]),
     )
+  })
+
+  it('v9 cree l empreinte de scope, attachee au programme', () => {
+    const db = fresh()
+    migrate(db)
+    expect(columns(db, 'program_scope_state')).toEqual(
+      new Set(['program_id', 'entries_json', 'checked_at']),
+    )
+    // Supprimer le programme emporte son empreinte (ON DELETE CASCADE).
+    db.exec("INSERT INTO programs (id, handle, name, following, updated_at) VALUES ('p1', 'acme', 'Acme', 0, 1)")
+    db.exec("INSERT INTO program_scope_state (program_id, entries_json, checked_at) VALUES ('p1', '[]', 1)")
+    db.exec("DELETE FROM programs WHERE id = 'p1'")
+    const row = db.prepare('SELECT COUNT(*) AS n FROM program_scope_state').get() as { n: number }
+    expect(row.n).toBe(0)
   })
 
   it('ne rejoue rien quand la base est deja a jour', () => {

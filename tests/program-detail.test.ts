@@ -65,6 +65,8 @@ function makeRepo(over: Record<string, unknown> = {}) {
     getProgram: () => null,
     setProgramDetail: vi.fn(),
     getProgramDetail: () => null,
+    getScopeState: () => null,
+    saveScopeState: vi.fn(),
     ...over
   }
 }
@@ -189,6 +191,59 @@ describe('fetchProgramDetail', () => {
     const c = makeClient({ getProgram: async () => detail({ webLinks: undefined as unknown as ProgramDetail['webLinks'] }) })
     const res = await fetchProgramDetail(c, U(1))
     expect(res.webLink).toBe('https://app.intigriti.com/programs/row')
+  })
+
+  it('enregistre l empreinte du scope sans signaler de changement au premier passage', async () => {
+    const saveScopeState = repoImpl.saveScopeState as ReturnType<typeof vi.fn>
+    const c = makeClient({
+      getProgramDomains: async () => ({
+        domains: { id: U(3), createdAt: 1, content: [domain({ endpoint: 'https://a.acme.com' })] }
+      })
+    })
+    const res = await fetchProgramDetail(c, U(1))
+    expect(res.scopeChanges).toBeNull()
+    expect(saveScopeState).toHaveBeenCalledWith(U(1), ['in|https://a.acme.com'], expect.any(Number))
+  })
+
+  it('signale les cibles ajoutees et retirees depuis la derniere consultation', async () => {
+    repoImpl = makeRepo({
+      getScopeState: () => ({ entries: ['in|https://old.acme.com', 'out|https://gone.acme.com'], checkedAt: 1 })
+    })
+    const c = makeClient({
+      getProgramDomains: async () => ({
+        domains: {
+          id: U(3),
+          createdAt: 1,
+          content: [
+            domain({ id: U(10), endpoint: 'https://old.acme.com', tier: en('Tier 1', 4) }),
+            domain({ id: U(11), endpoint: 'https://new.acme.com', tier: en('Tier 2', 3) })
+          ]
+        }
+      })
+    })
+    const res = await fetchProgramDetail(c, U(1))
+    expect(res.scopeChanges).toEqual({
+      added: [{ endpoint: 'https://new.acme.com', inScope: true }],
+      removed: [{ endpoint: 'https://gone.acme.com', inScope: false }]
+    })
+  })
+
+  it('ne signale rien quand le scope est identique (ordre et doublons mis a part)', async () => {
+    repoImpl = makeRepo({ getScopeState: () => ({ entries: ['in|https://a.acme.com'], checkedAt: 1 }) })
+    const c = makeClient({
+      getProgramDomains: async () => ({
+        domains: {
+          id: U(3),
+          createdAt: 1,
+          content: [
+            domain({ id: U(10), endpoint: 'https://a.acme.com', tier: en('Tier 1', 4) }),
+            domain({ id: U(11), endpoint: 'https://a.acme.com', tier: en('Tier 1', 4) })
+          ]
+        }
+      })
+    })
+    const res = await fetchProgramDetail(c, U(1))
+    expect(res.scopeChanges).toBeNull()
   })
 })
 

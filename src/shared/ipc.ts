@@ -34,6 +34,7 @@ export const IPC = {
   ScanExportLog: 'scan:exportLog',
   ScanStop: 'scan:stop',
   ScanRemove: 'scan:remove',
+  ScansExport: 'scans:export',
   FindingsList: 'findings:list',
   FindingsStats: 'findings:stats',
   FindingsCreate: 'findings:create',
@@ -177,6 +178,17 @@ export interface RoeInfo {
   attachments: { url: string; code: number }[]
 }
 
+export interface ScopeChangeItem {
+  endpoint: string
+  inScope: boolean
+}
+
+/** Cibles apparues ou disparues depuis la derniere consultation du scope. */
+export interface ScopeChangeSummary {
+  added: ScopeChangeItem[]
+  removed: ScopeChangeItem[]
+}
+
 export interface ProgramDetailData {
   programId: string
   handle: string
@@ -191,6 +203,11 @@ export interface ProgramDetailData {
   scope: ScopeDomain[]
   roe: RoeInfo | null
   fetchedAt: number
+  /**
+   * `null` au premier rafraichissement (aucune reference) et quand rien n'a
+   * bouge. Absent du cache hors ligne, qui ne recalcule pas de diff.
+   */
+  scopeChanges?: ScopeChangeSummary | null
 }
 
 export interface CredentialRecord {
@@ -252,6 +269,7 @@ export interface ScanOverview extends ScanRecord {
 export type ScanListAllResult = { ok: true; scans: ScanOverview[] } | DbFail
 
 export type ScanEventsResult = { ok: true; events: ScanEvent[]; done: boolean } | DbFail
+export type ScansExportResult = { ok: true; path: string; rows: number } | DbFail
 
 /**
  * Ecriture du journal complet (pas seulement les lignes encore en memoire dans
@@ -533,6 +551,7 @@ export interface BountyDeskBridge {
     exportLog(scanId: number): Promise<ScanLogExportResult>
     stop(scanId: number): Promise<DbResult>
     remove(scanId: number): Promise<DbResult>
+    export(format: ExportFormat): Promise<ScansExportResult>
   }
   findings: {
     list(query: FindingsQuery): Promise<FindingsListResult>

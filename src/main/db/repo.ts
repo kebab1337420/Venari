@@ -547,6 +547,36 @@ export class Repository {
       .get(programId) as unknown as { scopeJson: string | null; roeJson: string | null; fetchedAt: number } | null
   }
 
+  /**
+   * Empreinte du scope au dernier rafraichissement. Un JSON corrompu est traite
+   * comme une absence d'empreinte : on prefere ne rien signaler plutot que
+   * d'afficher un diff fantaisiste.
+   */
+  getScopeState(programId: string): { entries: string[]; checkedAt: number } | null {
+    const row = this.db
+      .prepare('SELECT entries_json AS entriesJson, checked_at AS checkedAt FROM program_scope_state WHERE program_id = ?')
+      .get(programId) as unknown as { entriesJson: string; checkedAt: number } | undefined
+    if (!row) return null
+    try {
+      const parsed: unknown = JSON.parse(row.entriesJson)
+      if (!Array.isArray(parsed) || !parsed.every((e) => typeof e === 'string')) return null
+      return { entries: parsed, checkedAt: row.checkedAt }
+    } catch {
+      return null
+    }
+  }
+
+  saveScopeState(programId: string, entries: string[], checkedAt: number = Date.now()): void {
+    this.db
+      .prepare(
+        `INSERT INTO program_scope_state (program_id, entries_json, checked_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(program_id) DO UPDATE SET
+           entries_json = excluded.entries_json, checked_at = excluded.checked_at`,
+      )
+      .run(programId, JSON.stringify(entries), checkedAt)
+  }
+
   listCredentials(programId: string): CredentialRow[] {
     return this.db
       .prepare(

@@ -1,6 +1,7 @@
 import type { Domain, IntigritiClient, RulesVersion } from '../../services/intigriti'
 import { getRepository } from '../db'
 import type { ProgramDetailData, RoeInfo, ScopeDomain } from '../../shared/ipc'
+import { diffScope, scopeChangeSummary, scopeEntries } from './scope-diff'
 
 /**
  * Un domaine est hors scope quand son tier est la sentinelle "Out of scope" de
@@ -61,6 +62,13 @@ export async function fetchProgramDetail(client: IntigritiClient, programId: str
   const roe = roeRules?.rulesOfEngagement ? toRoe(roeRules.rulesOfEngagement) : null
   const fetchedAt = Date.now()
 
+  // Diff avant d'ecraser l'empreinte : la premiere consultation ne signale rien
+  // (pas de reference), les suivantes listent les cibles apparues/disparues.
+  const entries = scopeEntries(scope)
+  const previous = repo.getScopeState(programId)
+  const scopeChanges = previous ? scopeChangeSummary(diffScope(previous.entries, entries)) : null
+  repo.saveScopeState(programId, entries, fetchedAt)
+
   repo.setProgramDetail(programId, JSON.stringify(scope), roe ? JSON.stringify(roe) : null, fetchedAt)
 
   return {
@@ -77,6 +85,7 @@ export async function fetchProgramDetail(client: IntigritiClient, programId: str
     scope,
     roe,
     fetchedAt,
+    scopeChanges,
   }
 }
 
@@ -107,5 +116,6 @@ export function getCachedProgramDetail(programId: string): ProgramDetailData | n
     scope,
     roe,
     fetchedAt: row.fetchedAt,
+    scopeChanges: null,
   }
 }

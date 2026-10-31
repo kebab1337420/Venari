@@ -174,6 +174,17 @@ export interface RoeInfo {
   attachments: { url: string; code: number }[]
 }
 
+export interface ScopeChangeItem {
+  endpoint: string
+  inScope: boolean
+}
+
+/** Cibles apparues ou disparues depuis la derniere consultation du scope. */
+export interface ScopeChangeSummary {
+  added: ScopeChangeItem[]
+  removed: ScopeChangeItem[]
+}
+
 export interface ProgramDetailData {
   programId: string
   handle: string
@@ -188,6 +199,11 @@ export interface ProgramDetailData {
   scope: ScopeDomain[]
   roe: RoeInfo | null
   fetchedAt: number
+  /**
+   * `null` au premier rafraichissement (aucune reference) et quand rien n'a
+   * bouge. Absent du cache hors ligne, qui ne recalcule pas de diff.
+   */
+  scopeChanges?: ScopeChangeSummary | null
 }
 
 export interface CredentialRecord {

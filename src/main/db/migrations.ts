@@ -202,4 +202,19 @@ export const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 9,
+    up(db) {
+      // Empreinte du scope vue au dernier rafraichissement. La prochaine
+      // ouverture de la fiche compare l'empreinte stockee au scope courant et
+      // signale les cibles ajoutees ou retirees entre-temps.
+      db.exec(`
+        CREATE TABLE program_scope_state (
+          program_id   TEXT PRIMARY KEY REFERENCES programs(id) ON DELETE CASCADE,
+          entries_json TEXT NOT NULL,
+          checked_at   INTEGER NOT NULL
+        );
+      `)
+    },
+  },
 ]

@@ -117,6 +117,20 @@ export function ScansScreen() {
         <button className="btn small" onClick={() => setTick((n) => n + 1)} disabled={loading}>
           Rafraîchir
         </button>
+        {scans.some((s) => s.status !== 'running') && (
+          <button
+            className="btn small"
+            disabled={loading}
+            onClick={async () => {
+              const targets = scans.filter((s) => s.status !== 'running')
+              if (!confirm(`Supprimer ${targets.length} scan${targets.length > 1 ? 's' : ''} terminé${targets.length > 1 ? 's' : ''} ?`)) return
+              for (const s of targets) await Api.scans.remove(s.id)
+              setTick((n) => n + 1)
+            }}
+          >
+            Nettoyer
+          </button>
+        )}
       </div>
 
       {error && (
@@ -171,6 +185,20 @@ export function ScansScreen() {
                     <button className="btn small" onClick={() => setSelected(s)}>
                       {s.status === 'running' ? 'Suivre' : 'Journal'}
                     </button>
+                    {s.status !== 'running' && (
+                      <button
+                        className="btn small danger"
+                        onClick={async () => {
+                          if (!confirm('Supprimer ce scan et son journal ?')) return
+                          const r = await Api.scans.remove(s.id)
+                          if (r.ok) setTick((n) => n + 1)
+                          else setError(r.error)
+                        }}
+                        title="Supprimer le scan"
+                      >
+                        ×
+                      </button>
+                    )}
                   </td>
                 </tr>
               )

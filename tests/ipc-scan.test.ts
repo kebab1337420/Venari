@@ -14,6 +14,7 @@ const hoisted = vi.hoisted(() => ({
     listAllScans: vi.fn<(limit: number) => unknown[]>(),
     getScan: vi.fn<(id: number) => unknown>(),
     getProgram: vi.fn<(id: string) => unknown>(),
+    removeScan: vi.fn<(id: number) => void>(),
     listScanEvents: vi.fn<(id: number, after: number) => unknown[]>(),
     listAllScanEvents: vi.fn<(id: number) => unknown[]>(),
   },
@@ -370,5 +371,18 @@ describe('ScanExportLog', () => {
     const res = await call(IPC.ScanExportLog, 0)
     expect(res).toMatchObject({ ok: false })
     expect(hoisted.repo.getScan).not.toHaveBeenCalled()
+  })
+})
+
+describe('ScanRemove', () => {
+  it('supprime le scan', () => {
+    const res = call(IPC.ScanRemove, 7)
+    expect(res).toEqual({ ok: true })
+    expect(hoisted.repo.removeScan).toHaveBeenCalledWith(7)
+  })
+
+  it('rejette un id invalide', () => {
+    const res = call(IPC.ScanRemove, 0)
+    expect(res).toMatchObject({ ok: false })
   })
 })

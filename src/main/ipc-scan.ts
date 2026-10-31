@@ -183,4 +183,14 @@ export function registerScanIpc(): void {
       return dbResultError(err)
     }
   })
+
+  ipcMain.handle(IPC.ScanRemove, (_event, rawId) => {
+    try {
+      const scanId = scanIdSchema.parse(rawId)
+      getRepository().removeScan(scanId)
+      return { ok: true } as const
+    } catch (err) {
+      return dbResultError(err)
+    }
+  })
 }

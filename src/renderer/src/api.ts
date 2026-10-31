@@ -7,6 +7,7 @@ import type {
   AgentTokenRevokeResult,
   AgentTokensResult,
   AgentViewTokenResult,
+  AppVersionResult,
   AuthStatus,
   AuthValidateResult,
   CredentialInput,
@@ -65,6 +66,9 @@ export const Api = {
     validate: (token: string): Promise<AuthValidateResult> => window.bountydesk.auth.validate(token),
     logout: (): Promise<void> => window.bountydesk.auth.clear()
   },
+  app: {
+    version: (): Promise<AppVersionResult> => window.bountydesk.app.version()
+  },
   programs: {
     list: (query: ProgramsQuery): Promise<ProgramsPage> => window.bountydesk.programs.list(query),
     sync: (): Promise<SyncResult> => window.bountydesk.programs.sync(),
@@ -95,7 +99,8 @@ export const Api = {
     events: (scanId: number, afterSeq: number): Promise<ScanEventsResult> =>
       window.bountydesk.scans.events(scanId, afterSeq),
     exportLog: (scanId: number): Promise<ScanLogExportResult> => window.bountydesk.scans.exportLog(scanId),
-    stop: (scanId: number): Promise<DbResult> => window.bountydesk.scans.stop(scanId)
+    stop: (scanId: number): Promise<DbResult> => window.bountydesk.scans.stop(scanId),
+    remove: (scanId: number): Promise<DbResult> => window.bountydesk.scans.remove(scanId)
   },
   findings: {
     list: (query: FindingsQuery): Promise<FindingsListResult> => window.bountydesk.findings.list(query),

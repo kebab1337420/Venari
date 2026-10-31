@@ -415,7 +415,9 @@ export function attachAgentsToServer(server: ReturnType<typeof import('node:http
       }
     }
   }, PING_INTERVAL)
+  pingTimer.unref()
   sweepTimer = setInterval(sweepStaleSessions, SWEEP_INTERVAL)
+  sweepTimer.unref()
 }
 
 export function closeAgents(): void {

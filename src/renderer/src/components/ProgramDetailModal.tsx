@@ -44,11 +44,41 @@ export function ProgramDetailModal({ program, onClose }: Props) {
   }
 
   const inScopeCount = detail?.scope.filter((d) => d.inScope).length ?? 0
+  const changes = detail?.scopeChanges ?? null
+  const shownChanges = 5
 
   return (
     <Modal title={program.name} onClose={onClose} wide>
       {error && <div className="banner-error">{error}</div>}
       {!detail && !error && <p className="muted">Chargement du détail…</p>}
+
+      {detail && changes && (
+        <div className="scope-change">
+          <strong>Scope modifié depuis la dernière consultation</strong>
+          <span className="muted">
+            {changes.added.length} ajoutée{changes.added.length > 1 ? 's' : ''}, {changes.removed.length} retirée
+            {changes.removed.length > 1 ? 's' : ''}
+          </span>
+          <ul>
+            {changes.added.slice(0, shownChanges).map((c, i) => (
+              <li key={`add-${i}`} className="add">
+                + <code>{c.endpoint}</code> ({c.inScope ? 'IN' : 'OUT'})
+              </li>
+            ))}
+            {changes.added.length > shownChanges && (
+              <li className="muted">+{changes.added.length - shownChanges} autre(s)…</li>
+            )}
+            {changes.removed.slice(0, shownChanges).map((c, i) => (
+              <li key={`rem-${i}`} className="rem">
+                − <code>{c.endpoint}</code> ({c.inScope ? 'IN' : 'OUT'})
+              </li>
+            ))}
+            {changes.removed.length > shownChanges && (
+              <li className="muted">−{changes.removed.length - shownChanges} autre(s)…</li>
+            )}
+          </ul>
+        </div>
+      )}
 
       {detail && (
         <div className="detail">

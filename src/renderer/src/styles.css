@@ -439,6 +439,40 @@ kbd.search-kbd {
   overflow-wrap: anywhere;
 }
 
+/* ---------- Changement de scope ---------- */
+
+.scope-change {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: var(--amber-soft);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius);
+}
+
+.scope-change ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scope-change li.add {
+  color: var(--green);
+}
+
+.scope-change li.rem {
+  color: var(--red);
+}
+
+.scope-change code {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
 /* ---------- Login ---------- */
 
 .shell.login {

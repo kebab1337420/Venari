@@ -150,8 +150,31 @@ describe('ProgramDetailModal', () => {
     expect(openExternal).toHaveBeenCalledWith('https://x/a.pdf')
   })
 
-  it('ouvre le formulaire d identifiants', async () => {
-    detail.mockResolvedValue({ ok: true, detail: detailData() })
+  it('signale les cibles ajoutees et retirees depuis la derniere consultation', async () => {
+    detail.mockResolvedValue({
+      ok: true,
+      detail: detailData({
+        scopeChanges: {
+          added: [{ endpoint: 'https://new.acme.com', inScope: true }],
+          removed: [{ endpoint: 'https://old.acme.com', inScope: false }]
+        }
+      })
+    })
+    renderModal()
+    expect(await screen.findByText('Scope modifié depuis la dernière consultation')).toBeTruthy()
+    expect(screen.getByText('1 ajoutée, 1 retirée')).toBeTruthy()
+    expect(screen.getByText('https://new.acme.com')).toBeTruthy()
+    expect(screen.getByText('https://old.acme.com')).toBeTruthy()
+  })
+
+  it('reste muet quand le scope n a pas change', async () => {
+    detail.mockResolvedValue({ ok: true, detail: detailData({ scopeChanges: null }) })
+    renderModal()
+    expect(await screen.findByText('acme-h')).toBeTruthy()
+    expect(screen.queryByText('Scope modifié depuis la dernière consultation')).toBeNull()
+  })
+
+  it('ouvre le formulaire d identifiants', async () => {    detail.mockResolvedValue({ ok: true, detail: detailData() })
     renderModal()
     fireEvent.click(await screen.findByText('Get credentials'))
     expect(screen.getByText('CREDS-SCREEN')).toBeTruthy()

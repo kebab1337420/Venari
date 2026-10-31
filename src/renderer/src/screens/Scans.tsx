@@ -127,6 +127,20 @@ export function ScansScreen() {
                     <button className="btn small" onClick={() => setSelected(s)}>
                       {s.status === 'running' ? 'Suivre' : 'Journal'}
                     </button>
+                    {s.status !== 'running' && (
+                      <button
+                        className="btn small danger"
+                        onClick={async () => {
+                          if (!confirm('Supprimer ce scan et son journal ?')) return
+                          const r = await Api.scans.remove(s.id)
+                          if (r.ok) setTick((n) => n + 1)
+                          else setError(r.error)
+                        }}
+                        title="Supprimer le scan"
+                      >
+                        ×
+                      </button>
+                    )}
                   </td>
                 </tr>
               )

@@ -31,6 +31,7 @@ export const IPC = {
   ScanListAll: 'scan:listAll',
   ScanEvents: 'scan:events',
   ScanStop: 'scan:stop',
+  ScanRemove: 'scan:remove',
   FindingsList: 'findings:list',
   FindingsStats: 'findings:stats',
   FindingsCreate: 'findings:create',
@@ -516,6 +517,7 @@ export interface BountyDeskBridge {
     listAll(limit?: number): Promise<ScanListAllResult>
     events(scanId: number, afterSeq: number): Promise<ScanEventsResult>
     stop(scanId: number): Promise<DbResult>
+    remove(scanId: number): Promise<DbResult>
   }
   findings: {
     list(query: FindingsQuery): Promise<FindingsListResult>

@@ -675,6 +675,10 @@ export class Repository {
     return this.db.prepare('SELECT * FROM scans WHERE id = ?').get(id) as unknown as ScanRow | undefined
   }
 
+  removeScan(id: number): void {
+    this.db.prepare('DELETE FROM scans WHERE id = ?').run(id)
+  }
+
   appendScanEvent(scanId: number, seq: number, level: string, message: string, ts: number): void {
     this.db
       .prepare('INSERT INTO scan_events (scan_id, seq, ts, level, message) VALUES (?, ?, ?, ?, ?)')

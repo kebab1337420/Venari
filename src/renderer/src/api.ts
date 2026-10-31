@@ -93,7 +93,8 @@ export const Api = {
     listAll: (limit?: number): Promise<ScanListAllResult> => window.bountydesk.scans.listAll(limit),
     events: (scanId: number, afterSeq: number): Promise<ScanEventsResult> =>
       window.bountydesk.scans.events(scanId, afterSeq),
-    stop: (scanId: number): Promise<DbResult> => window.bountydesk.scans.stop(scanId)
+    stop: (scanId: number): Promise<DbResult> => window.bountydesk.scans.stop(scanId),
+    remove: (scanId: number): Promise<DbResult> => window.bountydesk.scans.remove(scanId)
   },
   findings: {
     list: (query: FindingsQuery): Promise<FindingsListResult> => window.bountydesk.findings.list(query),
